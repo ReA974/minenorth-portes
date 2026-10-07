@@ -22,8 +22,6 @@ import java.util.UUID;
 
 public final class SystemeConfigFiles {
     private static final Path ROOT = FMLPaths.CONFIGDIR.get().resolve("Minenorth-portes");
-    private static final Path BANQUE = ROOT.resolve("banque.toml");
-    private static final Path COFFRE = ROOT.resolve("coffre.toml");
     private static final Path PORTE = ROOT.resolve("porte.toml");
     private static final Path DOCUMENTS = ROOT.resolve("documents.toml");
     // Listings temporarily parsed from porte.toml while the file is reloaded.
@@ -35,8 +33,6 @@ public final class SystemeConfigFiles {
     public static void init() {
         try {
             Files.createDirectories(ROOT);
-            if (!Files.exists(BANQUE)) Files.writeString(BANQUE, "# Configuration du système bancaire MineNorth\n\n", StandardCharsets.UTF_8);
-            if (!Files.exists(COFFRE)) Files.writeString(COFFRE, "[bank_vault]\n# Liste des objets pouvant apparaitre dans un coffre de banque.\n# Syntaxe : item_id|chance_en_pourcentage|min-max\n# La chance est comprise entre 0 et 100.\n# Chaque ligne est testée indépendamment.\nloot_entries = [\"minecraft:gold_ingot|75|2-8\", \"minecraft:golden_apple|55|4-16\", \"minecraft:emerald|40|1-5\", \"minecraft:diamond|20|1-3\", \"minecraft:gold_nugget|60|4-16\"]\n", StandardCharsets.UTF_8);
                         if (!Files.exists(DOCUMENTS)) Files.writeString(DOCUMENTS, "[identite]\nobligatoire = true\nnationalite_par_defaut = \"Française\"\nmodification_joueur = false\ndate_expiration = false\n\n[identite.creation]\ncommande = \"cidmenu <joueur>\"\n\n[identite.photo]\nsource = \"skin_minecraft\"\n\n[permissions]\nstaff = \"cid.staff\"\n", StandardCharsets.UTF_8);
             if (!Files.exists(PORTE)) Files.writeString(PORTE, "# Portes protégées MineNorth\n# Ce fichier est généré automatiquement.\n\n", StandardCharsets.UTF_8);
         } catch (IOException ignored) {}
