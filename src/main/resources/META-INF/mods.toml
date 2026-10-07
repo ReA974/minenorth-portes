@@ -1,0 +1,33 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+[[mods]]
+modId="minenorthportes"
+version="1.0.0"
+displayName="MineNorth Portes"
+authors="MineNorth RP"
+description='''Système de portes MineNorth RP : permissions, propriétaires, maisons, vente et location.'''
+[[dependencies.minenorthportes]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.minenorthportes]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.21)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.minenorthportes]]
+modId="minenorth_eurobank"
+mandatory=true
+versionRange="[1.0.0,2)"
+ordering="AFTER"
+side="BOTH"
+[[dependencies.minenorthportes]]
+modId="minenorthapi"
+mandatory=true
+versionRange="[1.0.0,2)"
+ordering="AFTER"
+side="BOTH"
