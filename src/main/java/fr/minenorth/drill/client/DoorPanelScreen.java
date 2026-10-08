@@ -19,6 +19,7 @@ public class DoorPanelScreen extends Screen {
     private int selectedType = 0;
     /** -1 = regular panel, 0 = permanent listing, 1 = temporary listing. */
     private int listingSetupMode = -1;
+    private static final String[] LOCK_NAMES = {"aucune", "Normale", "Avancée", "Experte"};
     private static final int PANEL_W = 560;
     private static final int PANEL_H = 460;
 
@@ -80,9 +81,11 @@ public class DoorPanelScreen extends Screen {
             case 1 -> buildOwner(x, y, w);
             case 2 -> buildRequest(x, y, w);
             case 3 -> buildListing(x, y, w);
+            case 5 -> { }
             default -> { if (splitLayout()) buildSplit(x, y, w); else buildAdmin(x, y, w); }
         }
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
+        if (data.adminPreview()) btn(x + w - 146, y + PANEL_H - 30, 130, 20, "ADMIN", MineNorthStyle.PINK, () -> send(20, "", false, ""));
     }
 
     // ------------------------------------------------------------------
@@ -265,6 +268,7 @@ public class DoorPanelScreen extends Screen {
         labels.clear();
         String type = data.type().toLowerCase(Locale.ROOT);
         headerHint = "Type : " + type + (data.ownerName() == null || data.ownerName().isBlank() ? "" : "  •  Propriétaire : " + data.ownerName());
+        if ("PERSONAL".equals(data.type())) headerHint += "  •  Serrure : " + LOCK_NAMES[Math.max(0, Math.min(3, data.security()))];
         boolean personal = "PERSONAL".equals(data.type());
 
         if (personal) {
@@ -280,9 +284,10 @@ public class DoorPanelScreen extends Screen {
                     () -> send(15, house.getValue(), false, ""));
             btn(x + 20, y + 216, w - 40, 22, "LIBÉRER LA PORTE", MineNorthStyle.PINK, () -> send(3, "", false, ""));
 
-            if (data.purchasePrice() > 0) {
-                btn(x + 20, y + 246, w - 40, 22, "REVENDRE LA MAISON • 50 %", MineNorthStyle.GREEN, () -> send(17, "", false, ""));
-            }
+            boolean resale = data.purchasePrice() > 0, lock = data.security() > 0;
+            int rowW = resale && lock ? (w - 50) / 2 : w - 40;
+            if (resale) btn(x + 20, y + 246, rowW, 22, "REVENDRE LA MAISON • 50 %", MineNorthStyle.GREEN, () -> send(17, "", false, ""));
+            if (lock) btn(resale ? x + 30 + rowW : x + 20, y + 246, rowW, 22, "RETIRER LA SERRURE (" + LOCK_NAMES[Math.min(3, data.security())].toUpperCase(Locale.ROOT) + ")", MineNorthStyle.DARK, () -> send(21, "0", false, ""));
 
             if (!data.listingMode().equals("NONE")) {
                 drawLabelLater("STATUT COMMERCIAL", x + 20, y + 282, MineNorthStyle.BLUE);
@@ -383,6 +388,14 @@ public class DoorPanelScreen extends Screen {
             drawLabelLater("ACCÈS ADMINISTRATEUR", x + 20, y + next + 62, MineNorthStyle.BLUE);
             btn(x + 20, y + next + 78, (w - 50) / 2, 22, "LIBÉRER LA PORTE", MineNorthStyle.PINK, () -> send(13, "", false, ""));
             btn(x + 30 + (w - 50) / 2, y + next + 78, (w - 50) / 2, 22, "RETIRER L'ANNONCE", MineNorthStyle.DARK, () -> send(14, "", false, ""));
+            if ("PERSONAL".equals(data.type())) {
+                drawLabelLater("SERRURE : " + LOCK_NAMES[Math.max(0, Math.min(3, data.security()))].toUpperCase(Locale.ROOT), x + 20, y + next + 110, MineNorthStyle.BLUE);
+                int lw = (w - 70) / 4;
+                for (int i = 0; i < 4; i++) {
+                    final int lvl = i;
+                    btn(x + 20 + i * (lw + 10), y + next + 126, lw, 22, LOCK_NAMES[i].toUpperCase(Locale.ROOT), data.security() == i ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> send(21, String.valueOf(lvl), false, ""));
+                }
+            }
         }
     }
 
@@ -435,6 +448,7 @@ public class DoorPanelScreen extends Screen {
             case 1 -> "GESTION DE LA PORTE";
             case 2 -> "PORTE PROTÉGÉE";
             case 3 -> "PORTE À VENDRE / À LOUER";
+            case 5 -> "INFORMATIONS DE LA PORTE";
             default -> "ADMINISTRATION DE LA PORTE";
         };
         String sub = data.mode() == 3
@@ -453,6 +467,14 @@ public class DoorPanelScreen extends Screen {
         } else if (data.mode() == 2) {
             centeredNoShadow(g, "Cette porte est protégée.", width / 2, y + 78, MineNorthStyle.TEXT);
             centeredNoShadow(g, "Propriétaire : " + data.ownerName(), width / 2, y + 98, MineNorthStyle.MUTED);
+        } else if (data.mode() == 5) {
+            String[] levels = LOCK_NAMES;
+            centeredNoShadow(g, "Type : " + data.type().toLowerCase(Locale.ROOT), width / 2, y + 78, MineNorthStyle.BLUE);
+            String owner = data.ownerName() == null || data.ownerName().isBlank() ? "aucun" : data.ownerName();
+            centeredNoShadow(g, "Propriétaire : " + owner, width / 2, y + 98, MineNorthStyle.TEXT);
+            if ("PERSONAL".equals(data.type())) {
+                centeredNoShadow(g, "Serrure : " + levels[Math.max(0, Math.min(3, data.security()))], width / 2, y + 118, MineNorthStyle.MUTED);
+            }
         } else if (data.mode() == 4) {
             g.drawString(font, headerHint, x + 20, y + 48, MineNorthStyle.MUTED, false);
             g.drawString(font, "Type actuel : " + data.type(), x + 20, y + PANEL_H - 55, MineNorthStyle.BLUE, false);

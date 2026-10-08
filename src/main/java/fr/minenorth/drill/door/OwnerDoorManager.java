@@ -8,7 +8,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import fr.minenorth.portes.item.LockUpgradeItem;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
@@ -65,7 +68,7 @@ public final class OwnerDoorManager {
             // sale/request/owner panels so the administrator always gets the
             // management panel.
             if (p.hasPermissions(2)) {
-                sendAdminPanel(p, l, pos, entry);
+                sendAdminPreview(p, l, pos, entry);
                 return;
             }
             // Porte reliée à une entreprise : son patron peut la gérer.
@@ -88,12 +91,42 @@ public final class OwnerDoorManager {
             }
             return;
         }
-        if (canOpen(p, l, pos, entry)) {
-            // Le client croyait la porte verrouillée (liste pas encore resynchronisée) : on l'ouvre côté serveur.
-            toggleDoor(l, pos);
-        } else {
+        // Le clic vanilla arrive aussi au serveur (interact) : l'ouverture, le crochet et la serrure y sont traités.
+        if (!canOpen(p, l, pos, entry)) {
             p.displayClientMessage(Component.translatable("message.minenorthsysteme.door_denied"), true);
         }
+    }
+
+    /**
+     * Sneak + clic droit avec une serrure renforcée sur sa propre porte de maison : applique le niveau et consomme l'item.
+     * Renvoie vrai si un item de serrure était en main (pose réussie ou refusée), pour que le clic ne fasse rien d'autre.
+     */
+    private static boolean tryUpgrade(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry entry) {
+        ItemStack held = p.getMainHandItem();
+        if (!(held.getItem() instanceof LockUpgradeItem lock)) return false;
+        if (entry.type() != OwnerDoorData.DoorType.PERSONAL || entry.owner() == null || !entry.owner().equals(p.getUUID())) {
+            p.displayClientMessage(Component.literal("§cSeul le propriétaire d'une porte de maison peut la renforcer."), true);
+            return true;
+        }
+        OwnerDoorData d = OwnerDoorData.get(l);
+        int old = OwnerDoorData.securityOf(entry);
+        d.setSecurity(l, pos, lock.level() + 1);
+        if (!p.getAbilities().instabuild) {
+            held.shrink(1);
+            // L'ancienne serrure est rendue au propriétaire.
+            if (old > 0) giveLock(p, old);
+        }
+        SystemeConfigFiles.writeDoors(p.server, d);
+        String[] names = {"Normal", "Avancé", "Expert"};
+        p.displayClientMessage(Component.literal("§aSerrure renforcée installée : niveau " + names[lock.level()] + "."), true);
+        return true;
+    }
+
+    /** Rend l'item de serrure d'un niveau donné (1 à 3) : inventaire, sinon au sol. */
+    private static void giveLock(ServerPlayer p, int security) {
+        ItemStack st = new ItemStack(fr.minenorth.portes.item.ModItems.lockFor(security));
+        p.getInventory().add(st);
+        if (!st.isEmpty()) p.drop(st, false);
     }
 
     /** Ouvre ou ferme une porte sans passer par l'interaction vanilla. */
@@ -134,12 +167,16 @@ public final class OwnerDoorManager {
                 return;
             }
 
-            // OP always gets the administration panel first, even when the
-            // door is unowned or is a Police/Pompier/Entreprise/Organisation
-            // door whose logical owner is represented by its permission type.
-            // This is intentionally checked before the normal owner flow.
+            if (e.getHand() == InteractionHand.MAIN_HAND && tryUpgrade(p, l, e.getPos(), entry)) {
+                e.setCanceled(true);
+                e.setCancellationResult(InteractionResult.SUCCESS);
+                return;
+            }
+
+            // OP : aperçu joueur d'abord (toutes portes enregistrées), le bouton « Admin »
+            // du panneau ouvre ensuite l'administration. Vérifié avant le flux propriétaire normal.
             if (p.hasPermissions(2)) {
-                sendAdminPanel(p, l, e.getPos(), entry);
+                sendAdminPreview(p, l, e.getPos(), entry);
                 e.setCanceled(true);
                 e.setCancellationResult(InteractionResult.SUCCESS);
                 return;
@@ -195,10 +232,21 @@ public final class OwnerDoorManager {
                 e.setCancellationResult(InteractionResult.SUCCESS);
                 return;
             }
+            if (e.getHand() == InteractionHand.MAIN_HAND && LockpickManager.tryStart(p, l, e.getPos(), entry)) {
+                e.setCanceled(true);
+                e.setCancellationResult(InteractionResult.SUCCESS);
+                return;
+            }
             if (!canOpen(p, l, e.getPos(), entry)) {
                 p.displayClientMessage(Component.translatable("message.minenorthsysteme.door_denied"), true);
                 e.setCanceled(true);
                 e.setCancellationResult(InteractionResult.FAIL);
+            } else if (e.getHand() == InteractionHand.MAIN_HAND && l.getBlockState(e.getPos()).getBlock() instanceof DoorBlock door
+                    && !door.type().canOpenByHand()) {
+                // Porte en fer : le clic vanilla ne l'ouvre pas, un joueur autorisé doit pouvoir l'ouvrir à la main.
+                toggleDoor(l, e.getPos());
+                e.setCanceled(true);
+                e.setCancellationResult(InteractionResult.SUCCESS);
             }
         }
     }
@@ -210,7 +258,9 @@ public final class OwnerDoorManager {
             case PERSONAL -> data.isRenter(level, pos, player.getUUID())
                     || (entry.owner() != null && data.isTrusted(entry.owner(), player.getUUID()))
                     // Perquisition acceptée par le Commissaire : la police ouvre les portes du citoyen.
-                    || PoliceCompat.canSearch(player, entry.owner());
+                    || PoliceCompat.canSearch(player, entry.owner())
+                    // Crochetage réussi : accès temporaire, sans droit durable.
+                    || LockpickManager.hasTempAccess(player.getUUID(), new OwnerDoorData.DoorKey(level.dimension(), OwnerDoorData.normalize(level, pos)));
             case POLICE -> hasPermission(player, "grade.police") || PoliceCompat.isPolice(player);
             case POMPIER -> hasPermission(player, "grade.pompier") || SecoursCompat.isSecours(player);
             case MAIRIE -> hasPermission(player, "grade.mairie") || MairieCompat.isStaff(player);
@@ -236,7 +286,7 @@ public final class OwnerDoorManager {
     private static void openAssignment(ServerPlayer p, ServerLevel l, BlockPos pos) {
         CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
         CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));
-        ModNetwork.sendDoorPanel(p, l, pos, 0, "", List.of(), List.of(), OwnerDoorData.DoorType.PERSONAL, "", false);
+        sendPanel(p, l, pos, 0, "", List.of(), List.of(), OwnerDoorData.DoorType.PERSONAL, "", false);
     }
 
     private static void sendOwnerPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
@@ -255,13 +305,49 @@ public final class OwnerDoorManager {
                 req.add(MineNorth.displayName(p.server, u) + "|" + u);
             }
         }
-        ModNetwork.sendDoorPanel(p, l, pos, 1, ownerLabel(p, e), trusted, req, e.type(), e.permission(), e.temporary());
+        sendPanel(p, l, pos, 1, ownerLabel(p, e), trusted, req, e.type(), e.permission(), e.temporary());
     }
 
     private static void sendGroupOwnerPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
         CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
         CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));
-        ModNetwork.sendDoorPanel(p, l, pos, 1, ownerLabel(p, e), List.of(), List.of(), e.type(), e.permission(), e.temporary());
+        sendPanel(p, l, pos, 1, ownerLabel(p, e), List.of(), List.of(), e.type(), e.permission(), e.temporary());
+    }
+
+    /** Vrai pendant l'envoi d'un aperçu joueur à un OP : les panneaux partent avec le bouton « Admin ». */
+    private static boolean previewing;
+
+    private static void sendPanel(ServerPlayer p, ServerLevel l, BlockPos pos, int mode, String ownerName, List<String> trusted,
+                                  List<String> requests, OwnerDoorData.DoorType type, String permission, boolean temporary) {
+        ModNetwork.sendDoorPanel(p, l, pos, mode, ownerName, trusted, requests, type, permission, temporary, previewing);
+    }
+
+    /** Aperçu qu'un joueur aurait de cette porte (entreprise → annonce → propriétaire → demande), sinon panneau d'infos. */
+    private static void sendAdminPreview(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry entry) {
+        previewing = true;
+        try {
+            OwnerDoorData d = OwnerDoorData.get(l);
+            OwnerDoorData.DoorListing listing = d.listing(l, pos);
+            boolean ownerView = entry.owner() != null && entry.owner().equals(p.getUUID());
+            if (entry.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(entry.permission())
+                    && EntrepriseCompat.isOwner(p, EntrepriseCompat.id(entry.permission()))) {
+                sendGroupOwnerPanel(p, l, pos, entry);
+            } else if (listing != null && listing.active() && !ownerView) {
+                sendListingPanel(p, l, pos, entry);
+            } else if (ownerView) {
+                sendOwnerPanel(p, l, pos, entry);
+            } else if (entry.owner() != null && !canOpen(p, l, pos, entry)
+                    && (entry.type() == OwnerDoorData.DoorType.PERSONAL || entry.type() == OwnerDoorData.DoorType.ENTREPRISE
+                    || entry.type() == OwnerDoorData.DoorType.ORGANISATION)) {
+                sendRequestPanel(p, l, pos, entry);
+            } else {
+                CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
+                CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));
+                sendPanel(p, l, pos, 5, ownerLabel(p, entry), List.of(), List.of(), entry.type(), entry.permission(), entry.temporary());
+            }
+        } finally {
+            previewing = false;
+        }
     }
 
     private static void sendAdminPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
@@ -274,13 +360,13 @@ public final class OwnerDoorManager {
                 trusted.add(MineNorth.displayName(p.server, u));
             }
         }
-        ModNetwork.sendDoorPanel(p, l, pos, 4, ownerLabel(p, e), trusted, List.of(), e.type(), e.permission(), e.temporary());
+        sendPanel(p, l, pos, 4, ownerLabel(p, e), trusted, List.of(), e.type(), e.permission(), e.temporary());
     }
 
     private static void sendRequestPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
         CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
         CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));
-        ModNetwork.sendDoorPanel(p, l, pos, 2, ownerLabel(p, e), List.of(), List.of(), e.type(), e.permission(), e.temporary());
+        sendPanel(p, l, pos, 2, ownerLabel(p, e), List.of(), List.of(), e.type(), e.permission(), e.temporary());
     }
 
     private static void sendListingPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
@@ -292,7 +378,7 @@ public final class OwnerDoorManager {
         if (listing.renter() != null) {
             renter = MineNorth.displayName(p.server, listing.renter());
         }
-        ModNetwork.sendDoorPanel(p, l, pos, 3, ownerLabel(p, e), List.of(), List.of(), e.type(), e.permission(), e.temporary());
+        sendPanel(p, l, pos, 3, ownerLabel(p, e), List.of(), List.of(), e.type(), e.permission(), e.temporary());
     }
 
     public static void assign(ServerPlayer actor, BlockPos pos, String name, boolean temporary, OwnerDoorData.DoorType type, String permission) {
@@ -588,6 +674,30 @@ public final class OwnerDoorManager {
                 if (!player.hasPermissions(2) || entry == null) return;
                 unassign(player, pos);
             }
+            // Serrure : un OP règle n'importe quel niveau (0 = aucune), le propriétaire ne peut que la retirer (remboursée).
+            case 21 -> {
+                if (entry == null || entry.type() != OwnerDoorData.DoorType.PERSONAL) return;
+                int lvl;
+                try { lvl = Integer.parseInt(text.trim()); } catch (RuntimeException ex) { return; }
+                lvl = Math.max(0, Math.min(OwnerDoorData.PICK_CHANCE.length - 1, lvl));
+                boolean owner = entry.owner() != null && entry.owner().equals(player.getUUID());
+                boolean op = player.hasPermissions(2);
+                if (!op && !(owner && lvl == 0)) return;
+                int old = OwnerDoorData.securityOf(entry);
+                if (old == lvl) return;
+                data.setSecurity(level, pos, lvl);
+                if (owner && lvl == 0 && old > 0 && !player.getAbilities().instabuild) giveLock(player, old);
+                SystemeConfigFiles.writeDoors(player.server, data);
+                String[] names = {"aucune", "Normale", "Avancée", "Experte"};
+                player.displayClientMessage(Component.literal(lvl == 0 ? "§aSerrure retirée." : "§aSerrure réglée : " + names[lvl] + "."), true);
+                OwnerDoorData.DoorEntry updated = data.get(level, pos);
+                if (updated != null) { if (op && !owner) sendAdminPanel(player, level, pos, updated); else sendOwnerPanel(player, level, pos, updated); }
+            }
+            // Bouton « Admin » de l'aperçu joueur.
+            case 20 -> {
+                if (!player.hasPermissions(2) || entry == null) return;
+                sendAdminPanel(player, level, pos, entry);
+            }
             case 14 -> {
                 if (!player.hasPermissions(2) || entry == null) return;
                 data.clearListing(level, pos);
@@ -617,6 +727,7 @@ public final class OwnerDoorManager {
             CONTEXTS.remove(p.getUUID());
             CONTEXT_POS.remove(p.getUUID());
             ModNetwork.forgetLocks(p.getUUID());
+            LockpickManager.forget(p.getUUID());
             // On ne réécrit porte.toml que si le joueur avait des portes temporaires.
             if (data.clearTemporary(p.getUUID())) {
                 SystemeConfigFiles.writeDoors(p.server, data);

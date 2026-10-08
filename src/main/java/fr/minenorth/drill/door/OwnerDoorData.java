@@ -16,8 +16,8 @@ import java.util.*;
 
 public class OwnerDoorData extends SavedData {
     private static final String DATA_NAME = "minenorthportes_owner_doors";
-    /** Chance de réussite du crochetage (%) selon le niveau de serrure : Normal, Avancé, Expert. */
-    public static final int[] PICK_CHANCE = {75, 35, 5};
+    /** Chance de réussite du crochetage (%) selon le niveau : 0 aucune serrure, 1 Normal, 2 Avancé, 3 Expert. */
+    public static final int[] PICK_CHANCE = {75, 75, 35, 5};
 
     public static int securityOf(DoorEntry e) { return e == null ? 0 : Math.max(0, Math.min(PICK_CHANCE.length - 1, e.security())); }
 
@@ -379,7 +379,7 @@ public class OwnerDoorData extends SavedData {
     }
 
     public record DoorKey(ResourceKey<Level> dimension, BlockPos pos) {}
-    /** security : 0 = Normal, 1 = Avancé, 2 = Expert (voir PICK_CHANCE). */
+    /** security : 0 = aucune serrure, 1 = Normal, 2 = Avancé, 3 = Expert (voir PICK_CHANCE). */
     public record DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName, long purchasePrice, int security) {
         public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName, long purchasePrice) { this(owner, temporary, ownerName, type, permission, houseName, purchasePrice, 0); }
         public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName) { this(owner, temporary, ownerName, type, permission, houseName, 0, 0); }
