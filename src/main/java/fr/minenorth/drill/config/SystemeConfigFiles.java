@@ -60,6 +60,7 @@ public final class SystemeConfigFiles {
             lines.add("temporaire = " + door.temporary());
             lines.add("permission = \"" + escape(door.permission()) + "\"");
             lines.add("maison = \"" + escape(door.houseName()) + "\"");
+            lines.add("securite = " + door.security());
             var listing = data.listing(key);
             if (listing != null && listing.active()) {
                 lines.add("vente_mode = \"" + listing.mode().name().toLowerCase() + "\"");
@@ -88,18 +89,19 @@ public final class SystemeConfigFiles {
             PENDING_LISTINGS.clear();
             String dim = null, owner = "", uuid = "", type = "PERSONAL", permission = "", house = "", venteMode = "";
             String locataireUuid = ""; long ventePrix = 0, locationExpiration = 0; int venteJours = 0;
-            int x = 0, y = 0, z = 0; boolean temporary = false; boolean active = false;
+            int x = 0, y = 0, z = 0; boolean temporary = false; boolean active = false; int securite = 0;
             for (String raw : Files.readAllLines(PORTE, StandardCharsets.UTF_8)) {
                 String line = raw.trim();
                 if (line.equals("[[porte]]")) {
-                    if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration);
-                    active = true; dim = null; owner = ""; uuid = ""; type = "PERSONAL"; permission = ""; house = ""; venteMode = ""; locataireUuid = ""; ventePrix = 0; venteJours = 0; locationExpiration = 0; x = y = z = 0; temporary = false;
+                    if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, securite, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration);
+                    active = true; dim = null; owner = ""; uuid = ""; type = "PERSONAL"; permission = ""; house = ""; venteMode = ""; locataireUuid = ""; ventePrix = 0; venteJours = 0; locationExpiration = 0; x = y = z = 0; temporary = false; securite = 0;
                 } else if (active && line.startsWith("dimension")) dim = quoted(line);
                 else if (active && line.startsWith("proprietaire")) owner = quoted(line);
                 else if (active && line.startsWith("uuid")) uuid = quoted(line);
                 else if (active && line.startsWith("type")) type = quoted(line);
                 else if (active && line.startsWith("permission")) permission = quoted(line);
                 else if (active && line.startsWith("maison")) house = quoted(line);
+                else if (active && line.startsWith("securite")) securite = integer(line);
                 else if (active && line.startsWith("x")) x = integer(line);
                 else if (active && line.startsWith("y")) y = integer(line);
                 else if (active && line.startsWith("z")) z = integer(line);
@@ -110,7 +112,7 @@ public final class SystemeConfigFiles {
                 else if (active && line.startsWith("locataire_uuid")) locataireUuid = quoted(line);
                 else if (active && line.startsWith("location_expiration")) locationExpiration = longValue(line);
             }
-            if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration);
+            if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, securite, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration);
         } catch (Exception ignored) { return -1; }
         OwnerDoorData data = OwnerDoorData.get(server.overworld());
         data.replaceDoors(entries);
@@ -128,7 +130,7 @@ public final class SystemeConfigFiles {
         return entries.size();
     }
 
-    private static void addParsed(List<java.util.Map.Entry<OwnerDoorData.DoorKey, OwnerDoorData.DoorEntry>> out, String dim, int x, int y, int z, String owner, String uuid, String type, String permission, String house, boolean temporary, String venteMode, long ventePrix, int venteJours, String locataireUuid, long locationExpiration) {
+    private static void addParsed(List<java.util.Map.Entry<OwnerDoorData.DoorKey, OwnerDoorData.DoorEntry>> out, String dim, int x, int y, int z, String owner, String uuid, String type, String permission, String house, int securite, boolean temporary, String venteMode, long ventePrix, int venteJours, String locataireUuid, long locationExpiration) {
         if (dim == null || dim.isBlank()) return;
         ResourceLocation rl = ResourceLocation.tryParse(dim);
         if (rl == null) return;
@@ -136,7 +138,7 @@ public final class SystemeConfigFiles {
         java.util.UUID id = null;
         try { if (!uuid.isBlank()) id = java.util.UUID.fromString(uuid); } catch (Exception ignored) {}
         BlockPos pos = new BlockPos(x, y, z);
-        OwnerDoorData.DoorEntry entry = new OwnerDoorData.DoorEntry(id, temporary, owner, OwnerDoorData.DoorType.from(type), permission, house);
+        OwnerDoorData.DoorEntry entry = new OwnerDoorData.DoorEntry(id, temporary, owner, OwnerDoorData.DoorType.from(type), permission, house, 0, securite);
         OwnerDoorData.DoorKey dk = new OwnerDoorData.DoorKey(key, pos);
         out.add(new java.util.AbstractMap.SimpleEntry<>(dk, entry));
         // Les informations de vente/location sont appliquées après le remplacement global des portes dans reloadDoors.

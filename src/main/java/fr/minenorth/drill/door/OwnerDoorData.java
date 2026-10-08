@@ -16,6 +16,11 @@ import java.util.*;
 
 public class OwnerDoorData extends SavedData {
     private static final String DATA_NAME = "minenorthportes_owner_doors";
+    /** Chance de réussite du crochetage (%) selon le niveau de serrure : Normal, Avancé, Expert. */
+    public static final int[] PICK_CHANCE = {75, 35, 5};
+
+    public static int securityOf(DoorEntry e) { return e == null ? 0 : Math.max(0, Math.min(PICK_CHANCE.length - 1, e.security())); }
+
     private final Map<DoorKey, DoorEntry> doors = new HashMap<>();
     private final Map<UUID, Set<UUID>> trusted = new HashMap<>();
     private final Map<UUID, Map<UUID, DoorKey>> requests = new HashMap<>();
@@ -58,7 +63,7 @@ public class OwnerDoorData extends SavedData {
             DoorType type = DoorType.from(e.getString("Type"));
             String permission = e.getString("Permission");
             DoorKey key = new DoorKey(ResourceKey.create(Registries.DIMENSION, dim), BlockPos.of(e.getLong("Pos")));
-            d.doors.put(key, new DoorEntry(owner, e.getBoolean("Temporary"), ownerName, type, permission, e.getString("HouseName"), e.getLong("PurchasePrice")));
+            d.doors.put(key, new DoorEntry(owner, e.getBoolean("Temporary"), ownerName, type, permission, e.getString("HouseName"), e.getLong("PurchasePrice"), e.getInt("Security")));
         }
         ListTag tl = tag.getList("Trusted", 10);
         for (int i = 0; i < tl.size(); i++) {
@@ -104,6 +109,7 @@ public class OwnerDoorData extends SavedData {
             e.putString("Permission", en.getValue().permission);
             e.putString("HouseName", en.getValue().houseName);
             e.putLong("PurchasePrice", en.getValue().purchasePrice());
+            e.putInt("Security", en.getValue().security());
             dl.add(e);
         }
         tag.put("Doors", dl);
@@ -149,7 +155,8 @@ public class OwnerDoorData extends SavedData {
         DoorEntry previous = doors.get(key);
         if (previous != null) house = previous.houseName();
         long purchasePrice = previous == null ? 0 : previous.purchasePrice();
-        doors.put(key, new DoorEntry(uuid, temporary, name, type, permission == null ? "" : permission, house, purchasePrice));
+        int security = previous == null ? 0 : previous.security();
+        doors.put(key, new DoorEntry(uuid, temporary, name, type, permission == null ? "" : permission, house, purchasePrice, security));
         listings.remove(key);
         setDirty();
     }
@@ -157,6 +164,14 @@ public class OwnerDoorData extends SavedData {
     public void unassign(ServerLevel level, BlockPos pos) {
         DoorKey key = new DoorKey(level.dimension(), normalize(level, pos));
         doors.remove(key); listings.remove(key); setDirty();
+    }
+
+    public void setSecurity(ServerLevel level, BlockPos pos, int security) {
+        DoorKey key = new DoorKey(level.dimension(), normalize(level, pos));
+        DoorEntry e = doors.get(key);
+        if (e == null) return;
+        doors.put(key, new DoorEntry(e.owner(), e.temporary(), e.ownerName(), e.type(), e.permission(), e.houseName(), e.purchasePrice(), Math.max(0, Math.min(PICK_CHANCE.length - 1, security))));
+        setDirty();
     }
 
     public boolean isTrusted(UUID owner, UUID player) { return owner != null && (owner.equals(player) || trusted.getOrDefault(owner, Collections.emptySet()).contains(player)); }
@@ -266,7 +281,7 @@ public class OwnerDoorData extends SavedData {
         DoorEntry e = doors.get(key);
         if (e == null) return;
         String house = houseName == null ? "" : houseName.trim();
-        doors.put(key, new DoorEntry(e.owner(), e.temporary(), e.ownerName(), e.type(), e.permission(), house, e.purchasePrice()));
+        doors.put(key, new DoorEntry(e.owner(), e.temporary(), e.ownerName(), e.type(), e.permission(), house, e.purchasePrice(), e.security()));
         DoorListing l = listings.get(key);
         if (l != null) listings.put(key, new DoorListing(l.mode(), l.price(), l.days(), l.renter(), l.expiryMs(), house));
         setDirty();
@@ -364,8 +379,10 @@ public class OwnerDoorData extends SavedData {
     }
 
     public record DoorKey(ResourceKey<Level> dimension, BlockPos pos) {}
-    public record DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName, long purchasePrice) {
-        public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName) { this(owner, temporary, ownerName, type, permission, houseName, 0); }
-        public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission) { this(owner, temporary, ownerName, type, permission, "", 0); }
+    /** security : 0 = Normal, 1 = Avancé, 2 = Expert (voir PICK_CHANCE). */
+    public record DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName, long purchasePrice, int security) {
+        public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName, long purchasePrice) { this(owner, temporary, ownerName, type, permission, houseName, purchasePrice, 0); }
+        public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission, String houseName) { this(owner, temporary, ownerName, type, permission, houseName, 0, 0); }
+        public DoorEntry(UUID owner, boolean temporary, String ownerName, DoorType type, String permission) { this(owner, temporary, ownerName, type, permission, "", 0, 0); }
     }
 }

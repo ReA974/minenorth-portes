@@ -88,9 +88,19 @@ public final class OwnerDoorManager {
             }
             return;
         }
-        if (!canOpen(p, l, pos, entry)) {
+        if (canOpen(p, l, pos, entry)) {
+            // Le client croyait la porte verrouillée (liste pas encore resynchronisée) : on l'ouvre côté serveur.
+            toggleDoor(l, pos);
+        } else {
             p.displayClientMessage(Component.translatable("message.minenorthsysteme.door_denied"), true);
         }
+    }
+
+    /** Ouvre ou ferme une porte sans passer par l'interaction vanilla. */
+    static void toggleDoor(ServerLevel l, BlockPos pos) {
+        BlockPos low = OwnerDoorData.normalize(l, pos);
+        var state = l.getBlockState(low);
+        if (state.getBlock() instanceof DoorBlock door) door.setOpen(null, l, state, low, !state.getValue(DoorBlock.OPEN));
     }
 
     @SubscribeEvent
@@ -598,7 +608,7 @@ public final class OwnerDoorManager {
         // Seuls les joueurs dont la liste a changé reçoivent un paquet.
         boolean expired = d.expireRentals();
         if (expired) SystemeConfigFiles.writeDoors(e.getServer(), d);
-        if (expired || e.getServer().getTickCount() % 200 == 0) ModNetwork.syncDoorLocks(e.getServer());
+        if (expired || e.getServer().getTickCount() % 40 == 0) ModNetwork.syncDoorLocks(e.getServer());
     }
 
     @SubscribeEvent public static void logout(PlayerEvent.PlayerLoggedOutEvent e) {
