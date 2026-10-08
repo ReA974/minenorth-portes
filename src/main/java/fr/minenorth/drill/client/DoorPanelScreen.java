@@ -30,6 +30,7 @@ public class DoorPanelScreen extends Screen {
             case "POMPIER" -> 2;
             case "ENTREPRISE" -> 3;
             case "ORGANISATION" -> 4;
+            case "MAIRIE" -> 5;
             default -> 0;
         };
         this.sHouse = data.houseName() == null ? "" : data.houseName();
@@ -106,7 +107,7 @@ public class DoorPanelScreen extends Screen {
         if (fDays != null) sDays = fDays.getValue();
         if (fPlayer != null) aName = fPlayer.getValue();
         if (fPlayerHouse != null) aHouse = fPlayerHouse.getValue();
-        if (fPerm != null && selectedType >= 3) aPerm = fPerm.getValue();
+        if (fPerm != null && (selectedType == 3 || selectedType == 4)) aPerm = fPerm.getValue();
     }
 
     private void switchTo(Runnable change) { keep(); error = ""; change.run(); rebuildWidgets(); }
@@ -186,8 +187,8 @@ public class DoorPanelScreen extends Screen {
         // ---------- B) ATTRIBUTION ----------
         int by = y + 228;
         drawLabelLater("ATTRIBUER À UN JOUEUR OU À UN SERVICE", ix, by + 8, MineNorthStyle.WHITE);
-        String[] types = {"JOUEUR", "POLICE", "POMPIER", "ENTREPRISE", "ORGA"};
-        int bw = (iw - 40) / 5;
+        String[] types = {"JOUEUR", "POLICE", "POMPIER", "ENTREPRISE", "ORGA", "MAIRIE"};
+        int bw = (iw - 50) / 6;
         for (int i = 0; i < types.length; i++) {
             final int t = i;
             btn(ix + i * (bw + 10), by + 22, bw, 20, types[i], selectedType == i ? MineNorthStyle.CYAN : MineNorthStyle.DARK,
@@ -209,8 +210,8 @@ public class DoorPanelScreen extends Screen {
         } else {
             drawLabelLater("PERMISSION", ix, by + 50, MineNorthStyle.BLUE);
             fPerm = box(ix, by + 61, iw, "Permission",
-                    selectedType == 1 ? "grade.police" : selectedType == 2 ? "grade.pompier" : aPerm);
-            fPerm.setEditable(selectedType >= 3);
+                    selectedType == 1 ? "grade.police" : selectedType == 2 ? "grade.pompier" : selectedType == 5 ? "grade.mairie" : aPerm);
+            fPerm.setEditable(selectedType == 3 || selectedType == 4);
             buttonY = by + 88;
         }
         btn(ix, buttonY, iw, 22, "ATTRIBUER LA PORTE", MineNorthStyle.CYAN, this::submitAssign);
@@ -245,9 +246,9 @@ public class DoorPanelScreen extends Screen {
             if (existing) send(12, n, false, "PERSONAL|");
             else send(0, n, false, "PERSONAL|" + fPlayerHouse.getValue().trim());
         } else {
-            String type = selectedType == 1 ? "POLICE" : selectedType == 2 ? "POMPIER" : selectedType == 3 ? "ENTREPRISE" : "ORGANISATION";
+            String type = selectedType == 1 ? "POLICE" : selectedType == 2 ? "POMPIER" : selectedType == 3 ? "ENTREPRISE" : selectedType == 5 ? "MAIRIE" : "ORGANISATION";
             String perm = companyMode() ? companyPerm() : fPerm.getValue().trim();
-            if (selectedType >= 3 && perm.isEmpty()) { error = "Indiquez la permission."; return; }
+            if ((selectedType == 3 || selectedType == 4) && perm.isEmpty()) { error = "Indiquez la permission."; return; }
             send(existing ? 12 : 0, "", false, type + "|" + perm);
         }
     }
@@ -336,12 +337,13 @@ public class DoorPanelScreen extends Screen {
         drawLabelLater("PROPRIÉTAIRE MINECRAFT", x + 20, y + 68, MineNorthStyle.BLUE);
         name = box(x + 20, y + 84, w - 40, "Propriétaire Minecraft", data.ownerName());
 
-        int bw = 88;
+        int bw = 76;
         btn(x + 20, y + 112, bw, 22, "PERSONNEL", selectedType == 0 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 0; rebuildWidgets(); });
-        btn(x + 112, y + 112, bw, 22, "POLICE", selectedType == 1 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 1; rebuildWidgets(); });
-        btn(x + 204, y + 112, bw, 22, "POMPIER", selectedType == 2 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 2; rebuildWidgets(); });
-        btn(x + 296, y + 112, bw, 22, "ENTREPRISE", selectedType == 3 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 3; rebuildWidgets(); });
-        btn(x + 388, y + 112, bw, 22, "ORGA", selectedType == 4 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 4; rebuildWidgets(); });
+        btn(x + 104, y + 112, bw, 22, "POLICE", selectedType == 1 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 1; rebuildWidgets(); });
+        btn(x + 188, y + 112, bw, 22, "POMPIER", selectedType == 2 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 2; rebuildWidgets(); });
+        btn(x + 272, y + 112, bw, 22, "ENTREPRISE", selectedType == 3 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 3; rebuildWidgets(); });
+        btn(x + 356, y + 112, bw, 22, "ORGA", selectedType == 4 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 4; rebuildWidgets(); });
+        btn(x + 440, y + 112, bw, 22, "MAIRIE", selectedType == 5 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 5; rebuildWidgets(); });
 
         drawLabelLater("NOM DE LA MAISON", x + 20, y + 146, MineNorthStyle.BLUE);
         house = box(x + 20, y + 162, w - 40, "Nom de la maison", data.houseName());
@@ -351,13 +353,13 @@ public class DoorPanelScreen extends Screen {
             drawLabelLater("ENTREPRISE", x + 20, y + 190, MineNorthStyle.BLUE);
             companyPicker(x + 20, y + 206, w - 40);
             next = 234;
-        } else if (selectedType >= 3) {
+        } else if (selectedType == 3 || selectedType == 4) {
             drawLabelLater("PERMISSION", x + 20, y + 190, MineNorthStyle.BLUE);
             permission = box(x + 20, y + 206, w - 40, "Permission", data.permission());
             permission.setEditable(true);
             next = 234;
         }
-        String type = selectedType == 1 ? "POLICE" : selectedType == 2 ? "POMPIER" : selectedType == 3 ? "ENTREPRISE" : selectedType == 4 ? "ORGANISATION" : "PERSONAL";
+        String type = selectedType == 1 ? "POLICE" : selectedType == 2 ? "POMPIER" : selectedType == 3 ? "ENTREPRISE" : selectedType == 4 ? "ORGANISATION" : selectedType == 5 ? "MAIRIE" : "PERSONAL";
         btn(x + 20, y + next, w - 40, 24, "ENREGISTRER LES RÉGLAGES", MineNorthStyle.CYAN,
                 () -> send(12, name.getValue(), false, type + "|" + (companyMode() ? companyPerm() : permission == null ? "" : permission.getValue())));
         btn(x + 20, y + next + 30, w - 40, 22, "ENREGISTRER LE NOM DE LA MAISON", MineNorthStyle.DARK,

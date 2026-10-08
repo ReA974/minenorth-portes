@@ -34,6 +34,7 @@ public final class OwnerDoorManager {
         registerPermission(event, "grade.police");
         registerPermission(event, "grade.pompier");
         registerPermission(event, "grade.medical");
+        registerPermission(event, "grade.mairie");
         // Custom company/organisation nodes can be declared in porte.toml before startup.
         for (String permission : SystemeConfigFiles.readConfiguredPermissions()) registerPermission(event, permission);
     }
@@ -202,6 +203,7 @@ public final class OwnerDoorManager {
                     || PoliceCompat.canSearch(player, entry.owner());
             case POLICE -> hasPermission(player, "grade.police") || PoliceCompat.isPolice(player);
             case POMPIER -> hasPermission(player, "grade.pompier") || SecoursCompat.isSecours(player);
+            case MAIRIE -> hasPermission(player, "grade.mairie") || MairieCompat.isStaff(player);
             case ENTREPRISE, ORGANISATION -> EntrepriseCompat.linked(entry.permission())
                     // Porte reliée à une entreprise : patron + employés du grade autorisé (les OP ouvrent toujours).
                     ? player.hasPermissions(2) || EntrepriseCompat.canOpen(player, EntrepriseCompat.id(entry.permission()), EntrepriseCompat.minGrade(entry.permission()))
@@ -301,6 +303,7 @@ public final class OwnerDoorManager {
             permission = switch (type) {
                 case POLICE -> "grade.police";
                 case POMPIER -> "grade.pompier";
+                case MAIRIE -> "grade.mairie";
                 case ENTREPRISE, ORGANISATION -> permission == null ? "" : permission.trim();
                 default -> "";
             };
@@ -310,6 +313,7 @@ public final class OwnerDoorManager {
             ownerName = switch (type) {
                 case POLICE -> "Police";
                 case POMPIER -> "Pompiers";
+                case MAIRIE -> "Mairie";
                 case ENTREPRISE -> companyLabel(actor, permission);
                 case ORGANISATION -> "Organisation";
                 default -> "";
