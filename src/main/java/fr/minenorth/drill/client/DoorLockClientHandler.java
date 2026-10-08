@@ -28,7 +28,7 @@ public final class DoorLockClientHandler {
 
     @SubscribeEvent
     public static void rightClick(PlayerInteractEvent.RightClickBlock event) {
-        if (Minecraft.getInstance().level == null) return;
+        if (Minecraft.getInstance().level == null || event.getHand() != net.minecraft.world.InteractionHand.MAIN_HAND) return;
         if (!(event.getLevel().getBlockState(event.getPos()).getBlock() instanceof DoorBlock)) return;
         BlockPos pos = event.getPos();
         String key = Minecraft.getInstance().level.dimension().location() + "|" + pos.asLong();
