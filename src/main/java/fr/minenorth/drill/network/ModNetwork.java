@@ -3,6 +3,9 @@ public final class ModNetwork{private ModNetwork(){} private static final String
 public static void sendLockpickStart(ServerPlayer p,BlockPos pos,int security){CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new LockpickStartPacket(pos.asLong(),security));}
 public static void sendDoorLocks(ServerPlayer p,Collection<String> l){CHANNEL.send(PacketDistributor.PLAYER.with(()->p),new DoorLockSyncPacket(new ArrayList<>(l)));}
 
+    /** Rayon (blocs) autour du joueur dans lequel l'état verrouillé / ouvert des portes est synchronisé avec son client. */
+    private static final double LOCK_SYNC_RADIUS = 96;
+
     /** Dernière liste de portes verrouillées envoyée à chaque joueur (hash) : on ne renvoie que si elle a changé. */
     private static final Map<UUID, Integer> LAST_LOCKS = new HashMap<>();
 
@@ -12,13 +15,23 @@ public static void sendDoorLocks(ServerPlayer p,Collection<String> l){CHANNEL.se
     public static void syncDoorLocks(net.minecraft.server.MinecraftServer server) {
         var data = OwnerDoorData.get(server.overworld());
         var doors = data.allDoors();
+        // Le client n'a besoin de l'état « verrouillé » que des portes à portée (clic, indication) : on n'évalue que celles-là
+        // (le serveur reste seul juge à l'ouverture). Évite joueurs x portes évaluations de droits à chaque synchro.
+        final double reach2 = LOCK_SYNC_RADIUS * LOCK_SYNC_RADIUS;
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             var locked = new ArrayList<String>();
+            var dim = p.level().dimension();
+            double px = p.getX(), pz = p.getZ();
+            ServerLevel level = null;
             for (var e : doors) {
-                ServerLevel level = server.getLevel(e.getKey().dimension());
-                if (level == null) continue;
-                if (!OwnerDoorManager.canOpen(p, level, e.getKey().pos(), e.getValue()))
-                    locked.add(e.getKey().dimension().location() + "|" + e.getKey().pos().asLong());
+                if (!e.getKey().dimension().equals(dim)) continue;
+                BlockPos bp = e.getKey().pos();
+                double dx = bp.getX() + 0.5 - px, dz = bp.getZ() + 0.5 - pz;
+                if (dx * dx + dz * dz > reach2) continue;
+                if (level == null) level = server.getLevel(dim);
+                if (level == null) break;
+                if (!OwnerDoorManager.canOpen(p, level, bp, e.getValue()))
+                    locked.add(dim.location() + "|" + bp.asLong());
             }
             Collections.sort(locked);
             Integer before = LAST_LOCKS.put(p.getUUID(), locked.hashCode());
