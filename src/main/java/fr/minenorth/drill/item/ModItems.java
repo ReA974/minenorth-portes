@@ -21,16 +21,12 @@ public final class ModItems {
     public static final RegistryObject<Item> LOCK_ADVANCED = ITEMS.register("serrure_avancee", () -> new LockUpgradeItem(1, new Item.Properties().stacksTo(16)));
     public static final RegistryObject<Item> LOCK_EXPERT = ITEMS.register("serrure_expert", () -> new LockUpgradeItem(2, new Item.Properties().stacksTo(16)));
 
-    public static final RegistryObject<CreativeModeTab> TAB = TABS.register("portes", () -> CreativeModeTab.builder()
-            .title(Component.literal("MineNorth Portes"))
-            .icon(() -> LOCKPICK.get().getDefaultInstance())
-            .displayItems((params, out) -> {
+    public static final net.minecraft.world.item.CreativeModeTab.DisplayItemsGenerator TAB_ITEMS = (params, out) -> {
                 out.accept(LOCKPICK.get());
                 out.accept(LOCK_NORMAL.get());
                 out.accept(LOCK_ADVANCED.get());
                 out.accept(LOCK_EXPERT.get());
-            })
-            .build());
+            };
 
     /** Item de serrure correspondant à un niveau de sécurité (1 Normal, 2 Avancé, 3 Expert). */
     public static Item lockFor(int security) {
@@ -39,6 +35,5 @@ public final class ModItems {
 
     public static void register(IEventBus bus) {
         ITEMS.register(bus);
-        TABS.register(bus);
     }
 }
