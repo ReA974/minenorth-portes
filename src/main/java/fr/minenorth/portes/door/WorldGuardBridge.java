@@ -160,7 +160,7 @@ public final class WorldGuardBridge {
         for (var en : data.allDoors()) {
             OwnerDoorData.DoorEntry d = en.getValue();
             if (d.type() != OwnerDoorData.DoorType.PERSONAL || d.temporary() || d.houseName() == null || d.houseName().isBlank()) continue;
-            House h = new House(en.getKey().dimension().location().toString(), d.houseName().trim());
+            House h = new House(en.getKey().dimension().location().toString(), d.houseName().trim().toLowerCase(Locale.ROOT));
             Map<UUID, String> m = desired.computeIfAbsent(h, k -> new LinkedHashMap<>());
             if (d.owner() != null) put(s, m, d.owner());
             OwnerDoorData.DoorListing l = data.listing(en.getKey());
@@ -171,6 +171,8 @@ public final class WorldGuardBridge {
         // maisons connues : ajouts
         for (var he : desired.entrySet()) {
             String key = key(he.getKey());
+            if (!regionExists(s, he.getKey())) { warnMissing(he.getKey()); continue; }
+            MISSING_WARNED.remove(key);
             Map<UUID, String> have = applied.regions.computeIfAbsent(key, k -> new LinkedHashMap<>());
             for (var m : he.getValue().entrySet()) {
                 if (have.containsKey(m.getKey())) continue;
@@ -183,6 +185,11 @@ public final class WorldGuardBridge {
         desired.keySet().forEach(h -> wanted.add(key(h)));
         for (var re : new HashMap<>(applied.regions).entrySet()) {
             House h = parse(re.getKey());
+            if (!regionExists(s, h)) {   // région supprimée : rien à retirer, on oublie
+                applied.regions.remove(re.getKey());
+                applied.setDirty();
+                continue;
+            }
             Map<UUID, String> want = wanted.contains(re.getKey()) ? desired.get(h) : Map.of();
             for (var m : new HashMap<>(re.getValue()).entrySet()) {
                 if (want != null && want.containsKey(m.getKey())) continue;
@@ -190,6 +197,29 @@ public final class WorldGuardBridge {
                 if (run(cfg.commandeRetrait, h, m.getValue(), s)) { re.getValue().remove(m.getKey()); applied.setDirty(); }
             }
             if (re.getValue().isEmpty() && !wanted.contains(re.getKey())) { applied.regions.remove(re.getKey()); applied.setDirty(); }
+        }
+    }
+
+    private static final Set<String> MISSING_WARNED = new LinkedHashSet<>();
+
+    private static void warnMissing(House h) {
+        if (MISSING_WARNED.add(key(h)))
+            LOG.warn("[Portes] Région WorldGuard « {} » introuvable pour la maison « {} » : créez-la (/rg define {}), puis /portewg resync.", regionName(h.name()), h.name(), regionName(h.name()));
+    }
+
+    /**
+     * La région existe-t-elle ? Lecture du fichier regions.yml de WorldGuard (plugins/WorldGuard/worlds/<monde>/regions.yml) ; si le fichier est
+     * absent (autre stockage, autre chemin), on suppose qu'elle existe. WorldGuard enregistre ses régions avec un petit délai après un /rg define.
+     */
+    private static boolean regionExists(MinecraftServer s, House h) {
+        Path f = FMLPaths.GAMEDIR.get().resolve("plugins").resolve("WorldGuard").resolve("worlds").resolve(worldName(s, h.dim())).resolve("regions.yml");
+        try {
+            if (!Files.isRegularFile(f)) return true;
+            String text = Files.readString(f, StandardCharsets.UTF_8);
+            String id = regionName(h.name());
+            return java.util.regex.Pattern.compile("(?m)^ {2,8}" + java.util.regex.Pattern.quote(id) + ":[ \\t\\r]*$").matcher(text).find();
+        } catch (IOException | RuntimeException e) {
+            return true;
         }
     }
 

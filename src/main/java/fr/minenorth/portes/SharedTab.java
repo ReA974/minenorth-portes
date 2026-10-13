@@ -1,4 +1,4 @@
-package fr.minenorth.drill;
+package fr.minenorth.portes;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
