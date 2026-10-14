@@ -56,6 +56,8 @@ public final class WorldGuardBridge {
         /** Variables : {region}, {joueur}, {monde}. Lancées à la console du serveur. */
         public String commandeAjout = "region addmember -w {monde} {region} {joueur}";
         public String commandeRetrait = "region removemember -w {monde} {region} {joueur}";
+        /** Lancée aussi au retrait : au cas où le joueur serait propriétaire (owner) et non simple membre de la région. Vide = désactivée. */
+        public String commandeRetraitProprietaire = "region removeowner -w {monde} {region} {joueur}";
         /** Ajouté devant le nom de la maison pour obtenir le nom de la région (ex. « maison_ »). */
         public String prefixeRegion = "";
         /** Nom du monde Bukkit de l'overworld ; vide = nom du dossier du monde (le nether et l'end y ajoutent _nether / _the_end). */
@@ -162,7 +164,10 @@ public final class WorldGuardBridge {
             if (d.type() != OwnerDoorData.DoorType.PERSONAL || d.temporary() || d.houseName() == null || d.houseName().isBlank()) continue;
             House h = new House(en.getKey().dimension().location().toString(), d.houseName().trim().toLowerCase(Locale.ROOT));
             Map<UUID, String> m = desired.computeIfAbsent(h, k -> new LinkedHashMap<>());
-            if (d.owner() != null) put(s, m, d.owner());
+            if (d.owner() != null) {
+                put(s, m, d.owner());
+                for (UUID friend : data.trusted(d.owner())) put(s, m, friend);   // joueurs à qui le propriétaire a donné les droits (menu porte)
+            }
             OwnerDoorData.DoorListing l = data.listing(en.getKey());
             if (l != null && l.rentalActive()) put(s, m, l.renter());
         }
@@ -194,10 +199,31 @@ public final class WorldGuardBridge {
             for (var m : new HashMap<>(re.getValue()).entrySet()) {
                 if (want != null && want.containsKey(m.getKey())) continue;
                 if (budget-- <= 0) return;
-                if (run(cfg.commandeRetrait, h, m.getValue(), s)) { re.getValue().remove(m.getKey()); applied.setDirty(); }
+                if (revoke(h, m.getValue(), s)) { re.getValue().remove(m.getKey()); applied.setDirty(); }
             }
             if (re.getValue().isEmpty() && !wanted.contains(re.getKey())) { applied.regions.remove(re.getKey()); applied.setDirty(); }
         }
+    }
+
+    /** Retire le joueur de la région (membre, et propriétaire si la config le prévoit). */
+    private static boolean revoke(House h, String player, MinecraftServer s) {
+        boolean ok = run(cfg.commandeRetrait, h, player, s);
+        if (cfg.commandeRetraitProprietaire != null && !cfg.commandeRetraitProprietaire.isBlank()) run(cfg.commandeRetraitProprietaire, h, player, s);
+        return ok;
+    }
+
+    /**
+     * Retrait immédiat (revente, expulsion…) : sans attendre le prochain cycle de synchronisation ni dépendre de ce que le pont a déjà appliqué
+     * (un joueur ajouté à la région à la main, ou avant la mise en place du pont, serait sinon oublié).
+     */
+    public static void release(MinecraftServer s, String dim, String houseName, UUID id, String playerName) {
+        if (!cfg.actif || houseName == null || houseName.isBlank() || playerName == null || playerName.isBlank()) return;
+        House h = new House(dim, houseName.trim().toLowerCase(Locale.ROOT));
+        if (!regionExists(s, h)) return;
+        revoke(h, playerName, s);
+        Applied applied = Applied.get(s);
+        Map<UUID, String> have = applied.regions.get(key(h));
+        if (have != null && have.remove(id) != null) applied.setDirty();
     }
 
     private static final Set<String> MISSING_WARNED = new LinkedHashSet<>();

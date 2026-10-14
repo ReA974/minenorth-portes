@@ -549,7 +549,10 @@ public final class OwnerDoorManager {
         long refund = originalPrice / 2;
         if (refund <= 0) return;
         MineNorth.bank().refund(seller.server, seller.getUUID(), refund, "portes:revente");
+        String houseName = e.houseName();
         d.returnHouseToMarket(key, originalPrice);
+        // WorldGuard : le vendeur n'est plus membre de la région tout de suite (sans attendre la synchronisation périodique)
+        WorldGuardBridge.release(seller.server, l.dimension().location().toString(), houseName, seller.getUUID(), seller.getGameProfile().getName());
         SystemeConfigFiles.writeDoors(seller.server, d);
         ModNetwork.syncDoorLocks(seller.server);
         seller.displayClientMessage(Component.literal("§aMaison revendue. Vous récupérez "+String.format("%.2f", refund/100.0)+" € (50 % du prix d'achat). La maison est remise en vente à "+String.format("%.2f", originalPrice/100.0)+" €."), false);

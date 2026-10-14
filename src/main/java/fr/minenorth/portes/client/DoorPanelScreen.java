@@ -85,7 +85,8 @@ public class DoorPanelScreen extends Screen {
             default -> { if (splitLayout()) buildSplit(x, y, w); else buildAdmin(x, y, w); }
         }
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
-        if (data.adminPreview()) btn(x + w - 146, y + PANEL_H - 30, 130, 20, "ADMIN", MineNorthStyle.PINK, () -> send(20, "", false, ""));
+        // En haut, à côté de « Fermer » : en bas du panneau (460 px) le bouton sortait de l'écran avec une échelle d'interface (GUI) de 3.
+        if (data.adminPreview()) btn(x + w - 100 - 96 - 8, y + 10, 96, 16, "ADMIN", MineNorthStyle.PINK, () -> send(20, "", false, ""));
     }
 
     // ------------------------------------------------------------------
