@@ -117,6 +117,21 @@ public final class AgencyService {
         return out;
     }
 
+    /** Tous les biens (vendus, loués ou non), pour les admins ; mode NONE = pas de fiche de vente ni de location. */
+    public static List<PropertyView> catalogAll(MinecraftServer s) {
+        OwnerDoorData d = OwnerDoorData.get(s.overworld());
+        PropertyInfoData infos = PropertyInfoData.get(s.overworld());
+        List<PropertyView> out = new ArrayList<>();
+        for (House h : houses(d)) out.add(view(d, infos, h, listing(d, h), d.housePurchasePrice(h.first())));
+        return out;
+    }
+
+    /** Porte de référence d'un bien (celle dont le panneau admin règle toute la maison), ou null. */
+    public static DoorKey referenceDoorKey(MinecraftServer s, String dimension, String houseName) {
+        House h = find(OwnerDoorData.get(s.overworld()), dimension, houseName);
+        return h == null ? null : h.first();
+    }
+
     private static boolean companyDoor(DoorEntry e) {
         return e.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(e.permission());
     }

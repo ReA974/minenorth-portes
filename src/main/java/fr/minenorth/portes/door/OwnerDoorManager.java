@@ -352,6 +352,18 @@ public final class OwnerDoorManager {
         }
     }
 
+    /** Ouvre le panneau d'administration de la porte {@code key} chez un OP, sans qu'il soit devant la porte (depuis l'agence). */
+    public static void openAdminPanel(ServerPlayer p, OwnerDoorData.DoorKey key) {
+        if (!p.hasPermissions(2)) return;
+        ServerLevel l = p.server.getLevel(key.dimension());
+        if (l == null) return;
+        OwnerDoorData.DoorEntry e = OwnerDoorData.get(l).entry(key);
+        if (e == null) return;
+        CONTEXTS.put(p.getUUID(), key);
+        CONTEXT_POS.put(p.getUUID(), key.pos());
+        sendAdminPanel(p, l, key.pos(), e);
+    }
+
     private static void sendAdminPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
         CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
         CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));

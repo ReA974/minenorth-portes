@@ -49,19 +49,28 @@ public class PropertyConfigScreen extends Screen {
         description.setValue(keep == null ? "" : keep);
         addRenderableWidget(description);
         int half = (W - 48) / 2;
-        addRenderableWidget(new MineNorthButton(x + 20, y + 178, half, 22, Component.literal("PRENDRE UNE CAPTURE"), MineNorthStyle.CYAN, this::capture)
-                .enabled(data.imageCount() < 4));
+        photoButton = addRenderableWidget(new MineNorthButton(x + 20, y + 178, half, 22, Component.literal("PRENDRE LES 3 PHOTOS"), MineNorthStyle.CYAN, this::capture)
+                .enabled(!dirty()));
+        description.setResponder(s -> photoButton.enabled(!dirty()));
         addRenderableWidget(new MineNorthButton(x + 28 + half, y + 178, half, 22, Component.literal("EFFACER LES CAPTURES"), MineNorthStyle.PINK,
                 () -> send(23, "", "")).enabled(data.imageCount() > 0));
-        addRenderableWidget(new MineNorthButton(x + 20, y + 222, half, 28, Component.literal("ENREGISTRER"), MineNorthStyle.GREEN,
+        addRenderableWidget(new MineNorthButton(x + 20, y + 234, half, 28, Component.literal("ENREGISTRER"), MineNorthStyle.GREEN,
                 () -> send(22, category + "|" + (furnished ? "1" : "0"), description.getValue())));
-        addRenderableWidget(new MineNorthButton(x + 28 + half, y + 222, half, 28, Component.literal("FERMER"), MineNorthButton.GHOST, this::onClose));
+        addRenderableWidget(new MineNorthButton(x + 28 + half, y + 234, half, 28, Component.literal("FERMER"), MineNorthButton.GHOST, this::onClose));
     }
 
-    /** Ferme l'écran puis prend la capture de la vue du joueur (voir {@link PropertyCapture}). */
+    private MineNorthButton photoButton;
+
+    /** Vrai si la fiche modifiée à l'écran n'est pas encore enregistrée. */
+    private boolean dirty() {
+        String desc = description == null ? data.description() : description.getValue();
+        return !category.equals(data.category()) || furnished != data.furnished() || !desc.trim().equals(data.description().trim());
+    }
+
+    /** Ferme l'écran et passe en mode photo : un clic droit par photo (voir {@link PropertyCapture}). */
     private void capture() {
         onClose();
-        PropertyCapture.request();
+        PropertyCapture.start();
     }
 
     @Override
@@ -71,7 +80,8 @@ public class PropertyConfigScreen extends Screen {
         MineNorthStyle.panel(g, x, y, W, H, "FICHE D'AGENCE", data.houseName().toUpperCase());
         g.drawString(font, "CATÉGORIE", x + 20, y + 50, MineNorthStyle.BLUE, false);
         g.drawString(font, "DESCRIPTION", x + 20, y + 132, MineNorthStyle.BLUE, false);
-        g.drawString(font, "Captures : " + data.imageCount() + " / 4 — placez-vous devant le bien avant de capturer.", x + 20, y + 206, MineNorthStyle.MUTED, false);
+        g.drawString(font, "Photos : " + data.imageCount() + " / 3 — enregistrez la fiche, placez-vous devant le bien,", x + 20, y + 204, MineNorthStyle.MUTED, false);
+        g.drawString(font, "puis clic droit pour chaque photo (les 3 remplacent les anciennes).", x + 20, y + 214, MineNorthStyle.MUTED, false);
         super.render(g, mx, my, pt);
     }
 
