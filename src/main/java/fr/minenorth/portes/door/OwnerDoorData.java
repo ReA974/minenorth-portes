@@ -40,8 +40,10 @@ public class OwnerDoorData extends SavedData {
         }
     }
 
-    public record DoorListing(ListingMode mode, long price, int days, UUID renter, long expiryMs, String houseName) {
-        public DoorListing(ListingMode mode, long price, int days, UUID renter, long expiryMs) { this(mode, price, days, renter, expiryMs, ""); }
+    /** renterCompany : id de l'entreprise locataire (0 = location personnelle). */
+    public record DoorListing(ListingMode mode, long price, int days, UUID renter, long expiryMs, String houseName, int renterCompany) {
+        public DoorListing(ListingMode mode, long price, int days, UUID renter, long expiryMs, String houseName) { this(mode, price, days, renter, expiryMs, houseName, 0); }
+        public DoorListing(ListingMode mode, long price, int days, UUID renter, long expiryMs) { this(mode, price, days, renter, expiryMs, "", 0); }
         public boolean active() { return mode != ListingMode.NONE && price > 0; }
         public boolean rentalActive() { return mode == ListingMode.RENTAL && renter != null && expiryMs > System.currentTimeMillis(); }
     }
@@ -86,7 +88,7 @@ public class OwnerDoorData extends SavedData {
             DoorKey key = new DoorKey(ResourceKey.create(Registries.DIMENSION, dim), BlockPos.of(e.getLong("Pos")));
             DoorListing listing = new DoorListing(
                     ListingMode.from(e.getString("Mode")),
-                    e.getLong("Price"), e.getInt("Days"), parse(e.getString("Renter")), e.getLong("Expiry"), e.getString("HouseName")
+                    e.getLong("Price"), e.getInt("Days"), parse(e.getString("Renter")), e.getLong("Expiry"), e.getString("HouseName"), e.getInt("RenterCompany")
             );
             if (listing.active()) d.listings.put(key, listing);
         }
@@ -135,6 +137,7 @@ public class OwnerDoorData extends SavedData {
             if (l.renter() != null) e.putString("Renter", l.renter().toString());
             e.putLong("Expiry", l.expiryMs());
             e.putString("HouseName", l.houseName());
+            e.putInt("RenterCompany", l.renterCompany());
             sl.add(e);
         }
         tag.put("Listings", sl);
@@ -283,7 +286,7 @@ public class OwnerDoorData extends SavedData {
         String house = houseName == null ? "" : houseName.trim();
         doors.put(key, new DoorEntry(e.owner(), e.temporary(), e.ownerName(), e.type(), e.permission(), house, e.purchasePrice(), e.security()));
         DoorListing l = listings.get(key);
-        if (l != null) listings.put(key, new DoorListing(l.mode(), l.price(), l.days(), l.renter(), l.expiryMs(), house));
+        if (l != null) listings.put(key, new DoorListing(l.mode(), l.price(), l.days(), l.renter(), l.expiryMs(), house, l.renterCompany()));
         setDirty();
     }
 
@@ -312,6 +315,59 @@ public class OwnerDoorData extends SavedData {
     public void transferHouse(DoorKey key, UUID newOwner, String newOwnerName) {
         DoorListing listing = listing(key);
         transferHouse(key, newOwner, newOwnerName, listing != null && listing.mode() == ListingMode.SALE ? listing.price() : 0);
+    }
+
+    /** Porte d'une maison appartenant (ou louée) à une entreprise : type ENTREPRISE, reliée à une entreprise, avec un nom de maison. */
+    private static boolean isCompanyHouseDoor(DoorEntry e) {
+        return e.type() == DoorType.ENTREPRISE && !e.houseName().isBlank() && EntrepriseCompat.linked(e.permission());
+    }
+
+    /** Les portes de la maison deviennent celles de l'entreprise : tous ses membres les ouvrent (grade minimum 99). */
+    private void assignHouseToCompany(DoorKey key, int companyId, String companyName, long purchasePrice) {
+        for (DoorKey k : houseDoors(key)) {
+            DoorEntry e = doors.get(k);
+            if (e == null || (e.type() != DoorType.PERSONAL && !isCompanyHouseDoor(e))) continue;
+            doors.put(k, new DoorEntry(null, false, companyName, DoorType.ENTREPRISE, EntrepriseCompat.permission(companyId, 99), e.houseName(), purchasePrice, e.security()));
+        }
+    }
+
+    /** Achat par une entreprise : la maison lui appartient, plus aucune fiche de vente. */
+    public void transferHouseToCompany(DoorKey key, int companyId, String companyName, long purchasePrice) {
+        assignHouseToCompany(key, companyId, companyName, purchasePrice);
+        for (DoorKey k : houseDoors(key)) listings.remove(k);
+        setDirty();
+    }
+
+    /** Fin de bail d'une entreprise : les portes redeviennent celles d'une maison sans propriétaire. */
+    private void releaseCompanyHouse(DoorKey key) {
+        for (DoorKey k : houseDoors(key)) {
+            DoorEntry e = doors.get(k);
+            if (e != null && isCompanyHouseDoor(e)) doors.put(k, new DoorEntry(null, false, "", DoorType.PERSONAL, "", e.houseName(), 0, e.security()));
+        }
+    }
+
+    /**
+     * Location de toute la maison (toutes ses portes). companyId > 0 : location par une entreprise, ses portes
+     * sont reliées à l'entreprise pendant le bail ; sinon location personnelle (renter = locataire).
+     */
+    public void rentHouse(DoorKey key, UUID renter, int companyId, String companyName, long expiryMs) {
+        if (companyId > 0) assignHouseToCompany(key, companyId, companyName, 0);
+        for (DoorKey k : houseDoors(key)) {
+            DoorListing old = listings.get(k);
+            if (old == null || old.mode() != ListingMode.RENTAL) continue;
+            listings.put(k, new DoorListing(ListingMode.RENTAL, old.price(), old.days(), renter, expiryMs, old.houseName(), companyId));
+        }
+        setDirty();
+    }
+
+    /** Prolongation : nouvelle date de fin sur toutes les portes de la maison dont la location est en cours. */
+    public void extendRental(DoorKey key, long newExpiryMs) {
+        for (DoorKey k : houseDoors(key)) {
+            DoorListing old = listings.get(k);
+            if (old == null || old.mode() != ListingMode.RENTAL || old.renter() == null) continue;
+            listings.put(k, new DoorListing(ListingMode.RENTAL, old.price(), old.days(), old.renter(), newExpiryMs, old.houseName(), old.renterCompany()));
+        }
+        setDirty();
     }
 
     public long housePurchasePrice(DoorKey key) {
@@ -343,8 +399,8 @@ public class OwnerDoorData extends SavedData {
         String house = doors.containsKey(key) ? doors.get(key).houseName() : "";
         for (DoorKey k : houseDoors(key)) {
             DoorEntry e = doors.get(k);
-            if (e != null && e.type() == DoorType.PERSONAL) {
-                doors.put(k, new DoorEntry(null, false, "", DoorType.PERSONAL, "", e.houseName(), 0));
+            if (e != null && (e.type() == DoorType.PERSONAL || isCompanyHouseDoor(e))) {
+                doors.put(k, new DoorEntry(null, false, "", DoorType.PERSONAL, "", e.houseName(), 0, e.security()));
                 listings.put(k, new DoorListing(ListingMode.SALE, price, 0, null, 0, house));
             }
         }
@@ -363,6 +419,7 @@ public class OwnerDoorData extends SavedData {
         for (var e : new ArrayList<>(listings.entrySet())) {
             DoorListing l = e.getValue();
             if (l.mode() == ListingMode.RENTAL && l.renter() != null && l.expiryMs() <= now) {
+                if (l.renterCompany() > 0) releaseCompanyHouse(e.getKey());
                 relistHouseForRental(e.getKey(), l.price(), l.days());
                 dirty = true;
             }

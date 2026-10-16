@@ -60,6 +60,16 @@ public final class EntrepriseCompat {
         Object r = call("companyName", new Class<?>[]{MinecraftServer.class, int.class}, s, id);
         return r instanceof String v ? v : "";
     }
+    /** Compte bancaire de l'entreprise, ou null si elle n'existe pas. */
+    public static java.util.UUID accountId(MinecraftServer s, int id) {
+        Object r = call("accountOf", new Class<?>[]{MinecraftServer.class, int.class}, s, id);
+        return r instanceof java.util.UUID v ? v : null;
+    }
+    /** Patron de l'entreprise active, ou null (entreprise supprimée ou fermée). */
+    public static java.util.UUID ownerUuid(MinecraftServer s, int id) {
+        Object r = call("ownerOf", new Class<?>[]{MinecraftServer.class, int.class}, s, id);
+        return r instanceof java.util.UUID v ? v : null;
+    }
     public static boolean isOwner(ServerPlayer p, int id) {
         return Boolean.TRUE.equals(call("isOwner", new Class<?>[]{ServerPlayer.class, int.class}, p, id));
     }

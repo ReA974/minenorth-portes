@@ -68,6 +68,7 @@ public final class SystemeConfigFiles {
                 lines.add("vente_jours = " + listing.days());
                 lines.add("locataire_uuid = \"" + (listing.renter() == null ? "" : listing.renter()) + "\"");
                 lines.add("location_expiration = " + listing.expiryMs());
+                lines.add("locataire_entreprise = " + listing.renterCompany());
             }
             lines.add("");
         }
@@ -88,13 +89,13 @@ public final class SystemeConfigFiles {
             if (!Files.exists(PORTE)) return 0;
             PENDING_LISTINGS.clear();
             String dim = null, owner = "", uuid = "", type = "PERSONAL", permission = "", house = "", venteMode = "";
-            String locataireUuid = ""; long ventePrix = 0, locationExpiration = 0; int venteJours = 0;
+            String locataireUuid = ""; long ventePrix = 0, locationExpiration = 0; int venteJours = 0, locataireEntreprise = 0;
             int x = 0, y = 0, z = 0; boolean temporary = false; boolean active = false; int securite = 0;
             for (String raw : Files.readAllLines(PORTE, StandardCharsets.UTF_8)) {
                 String line = raw.trim();
                 if (line.equals("[[porte]]")) {
-                    if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, securite, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration);
-                    active = true; dim = null; owner = ""; uuid = ""; type = "PERSONAL"; permission = ""; house = ""; venteMode = ""; locataireUuid = ""; ventePrix = 0; venteJours = 0; locationExpiration = 0; x = y = z = 0; temporary = false; securite = 0;
+                    if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, securite, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration, locataireEntreprise);
+                    active = true; dim = null; owner = ""; uuid = ""; type = "PERSONAL"; permission = ""; house = ""; venteMode = ""; locataireUuid = ""; ventePrix = 0; venteJours = 0; locationExpiration = 0; locataireEntreprise = 0; x = y = z = 0; temporary = false; securite = 0;
                 } else if (active && line.startsWith("dimension")) dim = quoted(line);
                 else if (active && line.startsWith("proprietaire")) owner = quoted(line);
                 else if (active && line.startsWith("uuid")) uuid = quoted(line);
@@ -111,8 +112,9 @@ public final class SystemeConfigFiles {
                 else if (active && line.startsWith("vente_jours")) venteJours = integer(line);
                 else if (active && line.startsWith("locataire_uuid")) locataireUuid = quoted(line);
                 else if (active && line.startsWith("location_expiration")) locationExpiration = longValue(line);
+                else if (active && line.startsWith("locataire_entreprise")) locataireEntreprise = integer(line);
             }
-            if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, securite, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration);
+            if (active) addParsed(entries, dim, x, y, z, owner, uuid, type, permission, house, securite, temporary, venteMode, ventePrix, venteJours, locataireUuid, locationExpiration, locataireEntreprise);
         } catch (Exception ignored) { return -1; }
         OwnerDoorData data = OwnerDoorData.get(server.overworld());
         data.replaceDoors(entries);
@@ -123,14 +125,14 @@ public final class SystemeConfigFiles {
             if (l.mode() == OwnerDoorData.ListingMode.SALE) data.setSale(level, e.getKey().pos(), l.price());
             else if (l.mode() == OwnerDoorData.ListingMode.RENTAL) {
                 data.setRental(level, e.getKey().pos(), l.price(), l.days());
-                if (l.renter() != null && l.expiryMs() > System.currentTimeMillis()) data.rent(level, e.getKey().pos(), l.renter(), l.expiryMs());
+                if (l.renter() != null && l.expiryMs() > System.currentTimeMillis()) data.rentHouse(e.getKey(), l.renter(), l.renterCompany(), l.renterCompany() > 0 ? fr.minenorth.portes.door.EntrepriseCompat.name(server, l.renterCompany()) : "", l.expiryMs());
             }
         }
         writeDoors(server, data);
         return entries.size();
     }
 
-    private static void addParsed(List<java.util.Map.Entry<OwnerDoorData.DoorKey, OwnerDoorData.DoorEntry>> out, String dim, int x, int y, int z, String owner, String uuid, String type, String permission, String house, int securite, boolean temporary, String venteMode, long ventePrix, int venteJours, String locataireUuid, long locationExpiration) {
+    private static void addParsed(List<java.util.Map.Entry<OwnerDoorData.DoorKey, OwnerDoorData.DoorEntry>> out, String dim, int x, int y, int z, String owner, String uuid, String type, String permission, String house, int securite, boolean temporary, String venteMode, long ventePrix, int venteJours, String locataireUuid, long locationExpiration, int locataireEntreprise) {
         if (dim == null || dim.isBlank()) return;
         ResourceLocation rl = ResourceLocation.tryParse(dim);
         if (rl == null) return;
@@ -142,7 +144,7 @@ public final class SystemeConfigFiles {
         OwnerDoorData.DoorKey dk = new OwnerDoorData.DoorKey(key, pos);
         out.add(new java.util.AbstractMap.SimpleEntry<>(dk, entry));
         // Les informations de vente/location sont appliquées après le remplacement global des portes dans reloadDoors.
-        if (!venteMode.isBlank() && ventePrix > 0) PENDING_LISTINGS.put(dk, new OwnerDoorData.DoorListing(OwnerDoorData.ListingMode.from(venteMode), ventePrix, venteJours, parseUuid(locataireUuid), locationExpiration, house));
+        if (!venteMode.isBlank() && ventePrix > 0) PENDING_LISTINGS.put(dk, new OwnerDoorData.DoorListing(OwnerDoorData.ListingMode.from(venteMode), ventePrix, venteJours, parseUuid(locataireUuid), locationExpiration, house, locataireEntreprise));
     }
     private static String quoted(String line) { int a=line.indexOf('"'), b=line.lastIndexOf('"'); return a>=0 && b>a ? line.substring(a+1,b) : ""; }
     private static int integer(String line) { int a=line.indexOf('='); try { return Integer.parseInt(line.substring(a+1).trim()); } catch (Exception e) { return 0; } }
