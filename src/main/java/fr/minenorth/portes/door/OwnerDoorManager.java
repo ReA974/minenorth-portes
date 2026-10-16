@@ -30,6 +30,8 @@ public final class OwnerDoorManager {
     private OwnerDoorManager() {}
     private static final Map<UUID, OwnerDoorData.DoorKey> CONTEXTS = new HashMap<>();
     private static final Map<UUID, BlockPos> CONTEXT_POS = new HashMap<>();
+    /** Porte dont le panneau est ouvert chez ce joueur (null si aucune). */
+    public static OwnerDoorData.DoorKey contextKey(ServerPlayer p) { return CONTEXTS.get(p.getUUID()); }
     private static final Map<String, PermissionNode<Boolean>> PERMISSION_NODES = new HashMap<>();
 
     @SubscribeEvent
@@ -624,6 +626,22 @@ public final class OwnerDoorManager {
                 OwnerDoorData.DoorEntry updated = data.get(level, pos);
                 if (updated != null) { if (op && !owner) sendAdminPanel(player, level, pos, updated); else sendOwnerPanel(player, level, pos, updated); }
             }
+            // Fiche d'agence du bien (OP) : text = "CATEGORIE|meuble 0/1", extra = description.
+            case 22 -> {
+                if (!player.hasPermissions(2) || entry == null || entry.houseName().isBlank()) return;
+                String[] parts = text.split("\\|", 2);
+                fr.minenorth.portes.agency.PropertyInfoData.get(level).set(key.dimension().location().toString(), entry.houseName(),
+                        fr.minenorth.portes.agency.PropertyCategory.from(parts[0]), parts.length > 1 && parts[1].equals("1"), extra);
+                player.displayClientMessage(Component.literal("§aFiche d'agence enregistrée."), true);
+                sendAdminPanel(player, level, pos, entry);
+            }
+            // Efface les captures d'aperçu du bien (OP).
+            case 23 -> {
+                if (!player.hasPermissions(2) || entry == null || entry.houseName().isBlank()) return;
+                fr.minenorth.portes.agency.PropertyImages.clear(player.server, fr.minenorth.portes.agency.PropertyInfoData.get(level), key.dimension().location().toString(), entry.houseName());
+                player.displayClientMessage(Component.literal("§aCaptures effacées."), true);
+                sendAdminPanel(player, level, pos, entry);
+            }
             // Bouton « Admin » de l'aperçu joueur.
             case 20 -> {
                 if (!player.hasPermissions(2) || entry == null) return;
@@ -656,6 +674,7 @@ public final class OwnerDoorManager {
         if (e.getEntity() instanceof ServerPlayer p) {
             OwnerDoorData data = OwnerDoorData.get(p.serverLevel());
             CONTEXTS.remove(p.getUUID());
+            fr.minenorth.portes.agency.PropertyImages.forget(p.getUUID());
             CONTEXT_POS.remove(p.getUUID());
             ModNetwork.forgetLocks(p.getUUID());
             LockpickManager.forget(p.getUUID());
