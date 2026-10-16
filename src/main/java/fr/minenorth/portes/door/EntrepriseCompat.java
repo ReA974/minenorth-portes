@@ -65,6 +65,11 @@ public final class EntrepriseCompat {
         Object r = call("accountOf", new Class<?>[]{MinecraftServer.class, int.class}, s, id);
         return r instanceof java.util.UUID v ? v : null;
     }
+    /** TRUE / FALSE si l'entreprise est active ou non ; null si on ne peut pas le savoir (mod absent, erreur) : ne rien en déduire. */
+    public static Boolean isActive(MinecraftServer s, int id) {
+        Object r = call("isActive", new Class<?>[]{MinecraftServer.class, int.class}, s, id);
+        return r instanceof Boolean b ? b : null;
+    }
     /** Patron de l'entreprise active, ou null (entreprise supprimée ou fermée). */
     public static java.util.UUID ownerUuid(MinecraftServer s, int id) {
         Object r = call("ownerOf", new Class<?>[]{MinecraftServer.class, int.class}, s, id);

@@ -666,7 +666,7 @@ public final class OwnerDoorManager {
         // faits par les autres mods (grade police, embauche/licenciement en entreprise, perquisition…).
         // Seuls les joueurs dont la liste a changé reçoivent un paquet.
         d.expireRentals();
-        boolean expired = d.takeExpired();
+        boolean expired = d.takeExpired() | d.releaseOrphanCompanyHouses(e.getServer());
         if (expired) SystemeConfigFiles.writeDoors(e.getServer(), d);
         if (expired || e.getServer().getTickCount() % 40 == 0) ModNetwork.syncDoorLocks(e.getServer());
     }

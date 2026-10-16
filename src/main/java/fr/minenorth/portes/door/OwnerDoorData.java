@@ -430,6 +430,31 @@ public class OwnerDoorData extends SavedData {
         return dirty;
     }
 
+    /**
+     * Entreprise supprimée ou fermée : ses biens repassent au catalogue, sans remboursement (achat : remis en vente au prix d'achat ;
+     * location en cours : remise en location). Ne fait rien si l'état de l'entreprise est inconnu (mod Entreprises absent ou en erreur).
+     * Renvoie vrai si au moins une maison a changé.
+     */
+    public boolean releaseOrphanCompanyHouses(net.minecraft.server.MinecraftServer server) {
+        boolean changed = false;
+        for (var en : List.copyOf(doors.entrySet())) {
+            DoorEntry e = doors.get(en.getKey());
+            if (e == null || !isCompanyHouseDoor(e)) continue;
+            if (!Boolean.FALSE.equals(EntrepriseCompat.isActive(server, EntrepriseCompat.id(e.permission())))) continue;
+            DoorKey key = en.getKey();
+            DoorListing l = listing(key);
+            if (l != null && l.mode() == ListingMode.RENTAL && l.renterCompany() > 0) {
+                releaseCompanyHouse(key);
+                relistHouseForRental(key, l.price(), l.days());
+            } else {
+                returnHouseToMarket(key, housePurchasePrice(key));
+            }
+            changed = true;
+        }
+        if (changed) setDirty();
+        return changed;
+    }
+
     private boolean expiredFlag;
     /** Vrai (une seule fois) si une location a expiré depuis le dernier appel : le fichier porte.toml doit alors être réécrit. */
     public boolean takeExpired() { boolean r = expiredFlag; expiredFlag = false; return r; }
