@@ -33,9 +33,9 @@ public class PropertyConfigScreen extends Screen {
     protected void init() {
         super.init();
         int x = left(), y = top();
-        int third = (W - 40 - 16) / 3;
-        String[][] cats = {{"HOUSE", "MAISON"}, {"APARTMENT", "APPARTEMENT"}, {"BUSINESS", "ENTREPRISE"}};
-        for (int i = 0; i < 3; i++) {
+        int third = (W - 40 - 24) / 4;
+        String[][] cats = {{"HOUSE", "MAISON"}, {"APARTMENT", "APPART."}, {"BUSINESS", "ENTREPRISE"}, {"LOCAL", "LOCAL"}};
+        for (int i = 0; i < cats.length; i++) {
             final String id = cats[i][0];
             addRenderableWidget(new MineNorthButton(x + 20 + i * (third + 8), y + 62, third, 22, Component.literal(cats[i][1]),
                     category.equals(id) ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> { category = id; rebuildWidgets(); }));

@@ -16,5 +16,11 @@ class ImmoRulesTest {
     }
     @Test void extensionAddsToRemainingDays() { assertEquals(5_000 + 86_400_000L, ImmoRules.extendedExpiryMs(1_000, 5_000, 1)); }
     @Test void extensionOfExpiredRestartsFromNow() { assertEquals(10_000 + 172_800_000L, ImmoRules.extendedExpiryMs(10_000, 5_000, 2)); }
+    @Test void localIsLimitedToTwoAndNotBusiness() {
+        assertEquals(2, ImmoRules.MAX_LOCALS);
+        assertEquals(PropertyCategory.LOCAL, PropertyCategory.from("local"));
+        assertEquals(2, ImmoRules.limit(PropertyCategory.LOCAL));
+        assertNotEquals(PropertyCategory.BUSINESS, PropertyCategory.LOCAL);
+    }
     @Test void unknownCategoryDefaultsToHouse() { assertEquals(PropertyCategory.HOUSE, PropertyCategory.from("bogus")); assertEquals(PropertyCategory.BUSINESS, PropertyCategory.from("business")); }
 }

@@ -256,7 +256,7 @@ public final class AgencyService {
             r = payCompany(p, companyId, price, source);
         } else {
             if (!ImmoRules.canAcquire(cat, heldCount(s, p.getUUID(), cat))) {
-                return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + (cat == PropertyCategory.APARTMENT ? " appartements." : " maisons."));
+                return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + switch (cat) { case APARTMENT -> " appartements."; case LOCAL -> " locaux particuliers."; default -> " maisons."; });
             }
             r = payPersonal(p, e == null ? null : e.owner(), price, source);
         }
