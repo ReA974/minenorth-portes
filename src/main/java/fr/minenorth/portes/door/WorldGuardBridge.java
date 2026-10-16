@@ -161,9 +161,16 @@ public final class WorldGuardBridge {
         Map<House, Map<UUID, String>> desired = new LinkedHashMap<>();
         for (var en : data.allDoors()) {
             OwnerDoorData.DoorEntry d = en.getValue();
-            if (d.type() != OwnerDoorData.DoorType.PERSONAL || d.temporary() || d.houseName() == null || d.houseName().isBlank()) continue;
+            // Local d'entreprise (acheté ou loué via l'agence) : le patron est membre de la région.
+            boolean company = d.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(d.permission());
+            if ((d.type() != OwnerDoorData.DoorType.PERSONAL && !company) || d.temporary() || d.houseName() == null || d.houseName().isBlank()) continue;
             House h = new House(en.getKey().dimension().location().toString(), d.houseName().trim().toLowerCase(Locale.ROOT));
             Map<UUID, String> m = desired.computeIfAbsent(h, k -> new LinkedHashMap<>());
+            if (company) {
+                UUID boss = EntrepriseCompat.ownerUuid(s, EntrepriseCompat.id(d.permission()));
+                if (boss != null) put(s, m, boss);
+                continue;
+            }
             if (d.owner() != null) {
                 put(s, m, d.owner());
                 for (UUID friend : data.trusted(d.owner())) put(s, m, friend);   // joueurs à qui le propriétaire a donné les droits (menu porte)
