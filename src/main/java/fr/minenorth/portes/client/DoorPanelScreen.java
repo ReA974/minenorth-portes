@@ -288,7 +288,7 @@ public class DoorPanelScreen extends Screen {
 
             boolean resale = data.purchasePrice() > 0, lock = data.security() > 0;
             int rowW = resale && lock ? (w - 50) / 2 : w - 40;
-            if (resale) btn(x + 20, y + 246, rowW, 22, "REVENDRE LA MAISON • 50 %", MineNorthStyle.GREEN, () -> send(17, "", false, ""));
+            if (resale) btn(x + 20, y + 246, rowW, 22, "REVENDRE : À L'AGENCE", MineNorthStyle.GREEN, () -> send(17, "", false, ""));
             if (lock) btn(resale ? x + 30 + rowW : x + 20, y + 246, rowW, 22, "RETIRER LA SERRURE (" + LOCK_NAMES[Math.min(3, data.security())].toUpperCase(Locale.ROOT) + ")", MineNorthStyle.DARK, () -> send(21, "0", false, ""));
 
             if (!data.listingMode().equals("NONE")) {

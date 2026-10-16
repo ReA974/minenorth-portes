@@ -68,10 +68,15 @@ public final class AgencyService {
         List<House> out = new ArrayList<>();
         for (var g : groups.entrySet()) {
             List<DoorKey> doors = g.getValue();
-            doors.sort(Comparator.comparingLong((DoorKey k) -> k.pos().asLong()));
+            // Porte de référence : d'abord une porte de maison (personnelle ou d'entreprise), puis par position.
+            doors.sort(Comparator.comparingInt((DoorKey k) -> referenceDoor(d.entry(k)) ? 0 : 1).thenComparingLong(k -> k.pos().asLong()));
             out.add(new House(dimOf(doors.get(0)), names.get(g.getKey()), doors));
         }
         return out;
+    }
+
+    private static boolean referenceDoor(DoorEntry e) {
+        return e != null && (e.type() == OwnerDoorData.DoorType.PERSONAL || (e.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(e.permission())));
     }
 
     private static House find(OwnerDoorData d, String dimension, String houseName) {
@@ -228,6 +233,7 @@ public final class AgencyService {
         String source = rental ? "portes:location" : "portes:achat";
         DoorKey key = h.first();
         PayResult r;
+        if (business && e != null && e.owner() != null) return AgencyResult.fail("Ce bien appartient à un joueur : une entreprise ne peut pas l'acquérir.");
         if (business) {
             String err = companyError(p, companyId);
             if (err != null) return AgencyResult.fail(err);
@@ -274,7 +280,8 @@ public final class AgencyService {
             r = payCompany(p, l.renterCompany(), l.price(), "portes:location");
         } else {
             if (!p.getUUID().equals(l.renter())) return AgencyResult.fail("Ce bien n'est pas loué à votre nom.");
-            r = MineNorth.bank().charge(p, l.price(), "portes:location");
+            DoorEntry first = d.entry(h.first());
+            r = payPersonal(p, first == null ? null : first.owner(), l.price(), "portes:location");
         }
         if (r != PayResult.OK) return AgencyResult.fail("Paiement refusé : " + r.message());
         long expiry = ImmoRules.extendedExpiryMs(System.currentTimeMillis(), l.expiryMs(), l.days());

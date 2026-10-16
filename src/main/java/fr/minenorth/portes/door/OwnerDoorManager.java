@@ -589,7 +589,7 @@ public final class OwnerDoorManager {
                 OwnerDoorData.DoorEntry updated=data.get(level,pos);
                 if (updated != null) { if (player.hasPermissions(2)) sendAdminPanel(player,level,pos,updated); else sendOwnerPanel(player,level,pos,updated); }
             }
-            case 9 -> { if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID())) return; data.clearListing(level,pos); SystemeConfigFiles.writeDoors(player.server,data); ModNetwork.syncDoorLocks(player.server); sendOwnerPanel(player,level,pos,entry); }
+            case 9 -> { if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID())) return; data.clearHouseListings(key); SystemeConfigFiles.writeDoors(player.server,data); ModNetwork.syncDoorLocks(player.server); sendOwnerPanel(player,level,pos,entry); }
             // Achat, location et revente : uniquement a l'agence immobiliere.
             case 10, 11, 17 -> player.displayClientMessage(Component.literal("§cRendez-vous à l'agence immobilière pour acheter, louer ou revendre ce bien."), true);
             // OP-only administration of an already assigned door.
@@ -649,7 +649,7 @@ public final class OwnerDoorManager {
             }
             case 14 -> {
                 if (!player.hasPermissions(2) || entry == null) return;
-                data.clearListing(level, pos);
+                data.clearHouseListings(key);
                 SystemeConfigFiles.writeDoors(player.server, data);
                 ModNetwork.syncDoorLocks(player.server);
                 OwnerDoorData.DoorEntry updated = data.get(level, pos);
@@ -665,7 +665,8 @@ public final class OwnerDoorManager {
         // Fin de location : accès coupé tout de suite. Sinon, recalcul toutes les 10 s pour suivre les changements
         // faits par les autres mods (grade police, embauche/licenciement en entreprise, perquisition…).
         // Seuls les joueurs dont la liste a changé reçoivent un paquet.
-        boolean expired = d.expireRentals();
+        d.expireRentals();
+        boolean expired = d.takeExpired();
         if (expired) SystemeConfigFiles.writeDoors(e.getServer(), d);
         if (expired || e.getServer().getTickCount() % 40 == 0) ModNetwork.syncDoorLocks(e.getServer());
     }

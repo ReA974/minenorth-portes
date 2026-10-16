@@ -307,9 +307,9 @@ public class OwnerDoorData extends SavedData {
         for (DoorKey k : keys) {
             DoorEntry e = doors.get(k);
             if (e != null && e.type() == DoorType.PERSONAL) {
-                doors.put(k, new DoorEntry(newOwner, false, newOwnerName, DoorType.PERSONAL, "", e.houseName(), purchasePrice));
-                listings.remove(k);
+                doors.put(k, new DoorEntry(newOwner, false, newOwnerName, DoorType.PERSONAL, "", e.houseName(), purchasePrice, e.security()));
             }
+            listings.remove(k);
         }
         setDirty();
     }
@@ -426,9 +426,13 @@ public class OwnerDoorData extends SavedData {
                 dirty = true;
             }
         }
-        if (dirty) setDirty();
+        if (dirty) { setDirty(); expiredFlag = true; }
         return dirty;
     }
+
+    private boolean expiredFlag;
+    /** Vrai (une seule fois) si une location a expiré depuis le dernier appel : le fichier porte.toml doit alors être réécrit. */
+    public boolean takeExpired() { boolean r = expiredFlag; expiredFlag = false; return r; }
 
     public void replaceDoors(Collection<Map.Entry<DoorKey, DoorEntry>> entries) {
         doors.clear();
