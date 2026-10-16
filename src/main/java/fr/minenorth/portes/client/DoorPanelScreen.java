@@ -426,11 +426,7 @@ public class DoorPanelScreen extends Screen {
     }
 
     private void buildListing(int x, int y, int w) {
-        boolean rental = "RENTAL".equals(data.listingMode());
-        String action = rental ? (data.renter() == null || data.renter().isBlank() ? "LOUER LA MAISON" : "LOCATION DÉJÀ ACTIVE") : "ACHETER LA MAISON";
-        btn(x + 50, y + 205, w - 100, 28, action, rental ? MineNorthStyle.CYAN : MineNorthStyle.GREEN,
-                () -> send(rental ? 11 : 10, "", false, ""))
-                .enabled(rental ? (data.renter() == null || data.renter().isBlank()) : true);
+        btn(x + 50, y + 205, w - 100, 28, "RENDEZ-VOUS À L'AGENCE", MineNorthStyle.DARK, () -> {}).enabled(false);
     }
 
     @Override

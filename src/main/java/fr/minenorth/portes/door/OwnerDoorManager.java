@@ -483,7 +483,8 @@ public final class OwnerDoorManager {
     public static void listSale(ServerPlayer owner, BlockPos pos, long cents, String houseName) {
         ServerLevel l = owner.serverLevel(); OwnerDoorData d = OwnerDoorData.get(l); OwnerDoorData.DoorEntry e = d.get(l,pos);
         if (e == null || e.type() != OwnerDoorData.DoorType.PERSONAL || cents <= 0 || !owner.hasPermissions(2)) return;
-        String house = houseName == null ? "" : houseName.trim();
+        String house = (houseName == null || houseName.isBlank()) ? e.houseName() : houseName.trim();
+        if (house == null || house.isBlank()) { owner.displayClientMessage(Component.literal("§cDonnez un nom de maison avant de mettre le bien en vente ou en location."), true); return; }
         d.setSale(l,pos,cents,house); SystemeConfigFiles.writeDoors(owner.server,d); ModNetwork.syncDoorLocks(owner.server);
         owner.displayClientMessage(Component.literal("§aPorte mise en vente pour " + String.format("%.2f", cents/100.0) + " €" + (house.isBlank()?"":" • Maison : "+house)), true);
     }
@@ -491,7 +492,8 @@ public final class OwnerDoorManager {
     public static void listRental(ServerPlayer owner, BlockPos pos, long cents, int days, String houseName) {
         ServerLevel l = owner.serverLevel(); OwnerDoorData d = OwnerDoorData.get(l); OwnerDoorData.DoorEntry e = d.get(l,pos);
         if (e == null || e.type() != OwnerDoorData.DoorType.PERSONAL || cents <= 0 || days <= 0 || !owner.hasPermissions(2)) return;
-        String house = houseName == null ? "" : houseName.trim();
+        String house = (houseName == null || houseName.isBlank()) ? e.houseName() : houseName.trim();
+        if (house == null || house.isBlank()) { owner.displayClientMessage(Component.literal("§cDonnez un nom de maison avant de mettre le bien en vente ou en location."), true); return; }
         d.setRental(l,pos,cents,days,house); SystemeConfigFiles.writeDoors(owner.server,d); ModNetwork.syncDoorLocks(owner.server);
         owner.displayClientMessage(Component.literal("§aPorte proposée en location : " + String.format("%.2f", cents/100.0) + " € / " + days + " jour(s)" + (house.isBlank()?"":" • Maison : "+house)), true);
     }
@@ -501,74 +503,6 @@ public final class OwnerDoorManager {
         return e.owner() != null ? MineNorth.displayName(viewer.server, e.owner()) : e.ownerName();
     }
 
-    /**
-     * Paiement par carte d'une vente ou location. Porte d'un joueur : l'argent va au propriétaire (virement).
-     * Porte sans propriétaire (marché, mairie) ou propriétaire sans compte : l'argent part au trésor public.
-     */
-    private static PayResult pay(ServerPlayer payer, java.util.UUID owner, long cents, String source) {
-        var bank = MineNorth.bank();
-        if (owner == null || owner.equals(payer.getUUID()) || !bank.hasAccount(payer.server, owner)) return bank.charge(payer, cents, source);
-        PayResult check = bank.check(payer, cents);
-        if (check != PayResult.OK) return check;
-        PayResult r = bank.transfer(payer.server, payer.getUUID(), owner, cents);
-        if (r == PayResult.OK) {
-            ServerPlayer o = payer.server.getPlayerList().getPlayer(owner);
-            if (o != null) o.sendSystemMessage(Component.literal("§a" + MineNorth.displayName(payer) + " vous a versé "
-                    + String.format("%.2f", cents / 100.0) + " € (" + (source.endsWith("location") ? "location" : "achat") + ")."));
-        }
-        return r;
-    }
-
-    private static void buy(ServerPlayer buyer, ServerLevel l, BlockPos pos) {
-        if (buyer.distanceToSqr(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5) > 36.0) return;
-        OwnerDoorData d = OwnerDoorData.get(l); OwnerDoorData.DoorEntry e = d.get(l,pos); OwnerDoorData.DoorListing listing=d.listing(l,pos);
-        if(e==null || listing==null || listing.mode()!=OwnerDoorData.ListingMode.SALE) return;
-        if(e.owner()!=null && e.owner().equals(buyer.getUUID())) return;
-        PayResult r = pay(buyer, e.owner(), listing.price(), "portes:achat");
-        if(r != PayResult.OK){ buyer.displayClientMessage(Component.literal("§cPaiement refusé : "+r.message()), true); return; }
-        String oldOwner=e.ownerName();
-        String house=listing.houseName();
-        OwnerDoorData.DoorKey key=new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l,pos));
-        d.transferHouse(key,buyer.getUUID(),buyer.getGameProfile().getName(),listing.price());
-        SystemeConfigFiles.writeDoors(buyer.server,d); ModNetwork.syncDoorLocks(buyer.server);
-        String scope=house == null || house.isBlank() ? "cette porte" : "la maison « "+house+" »";
-        buyer.displayClientMessage(Component.literal("§aVous avez acheté "+scope+" pour "+String.format("%.2f",listing.price()/100.0)+" €. Toutes les portes de cette maison vous sont accessibles."), false);
-    }
-
-    private static void resell(ServerPlayer seller, ServerLevel l, BlockPos pos) {
-        if (seller.distanceToSqr(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5) > 36.0) return;
-        OwnerDoorData d = OwnerDoorData.get(l);
-        OwnerDoorData.DoorEntry e = d.get(l, pos);
-        if (e == null || e.owner() == null || !e.owner().equals(seller.getUUID()) || e.type() != OwnerDoorData.DoorType.PERSONAL) return;
-        OwnerDoorData.DoorKey key = new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos));
-        long originalPrice = d.housePurchasePrice(key);
-        if (originalPrice <= 0) {
-            seller.displayClientMessage(Component.literal("§cCette maison n'a pas de prix d'achat enregistré."), true);
-            return;
-        }
-        long refund = originalPrice / 2;
-        if (refund <= 0) return;
-        MineNorth.bank().refund(seller.server, seller.getUUID(), refund, "portes:revente");
-        String houseName = e.houseName();
-        d.returnHouseToMarket(key, originalPrice);
-        // WorldGuard : le vendeur n'est plus membre de la région tout de suite (sans attendre la synchronisation périodique)
-        WorldGuardBridge.release(seller.server, l.dimension().location().toString(), houseName, seller.getUUID(), seller.getGameProfile().getName());
-        SystemeConfigFiles.writeDoors(seller.server, d);
-        ModNetwork.syncDoorLocks(seller.server);
-        seller.displayClientMessage(Component.literal("§aMaison revendue. Vous récupérez "+String.format("%.2f", refund/100.0)+" € (50 % du prix d'achat). La maison est remise en vente à "+String.format("%.2f", originalPrice/100.0)+" €."), false);
-    }
-
-    private static void rent(ServerPlayer renter, ServerLevel l, BlockPos pos) {
-        if (renter.distanceToSqr(pos.getX()+0.5, pos.getY()+0.5, pos.getZ()+0.5) > 36.0) return;
-        OwnerDoorData d=OwnerDoorData.get(l); OwnerDoorData.DoorEntry e=d.get(l,pos); OwnerDoorData.DoorListing listing=d.listing(l,pos);
-        if(e==null || listing==null || listing.mode()!=OwnerDoorData.ListingMode.RENTAL || listing.renter()!=null) return;
-        if(e.owner()!=null && e.owner().equals(renter.getUUID())) return;
-        PayResult r=pay(renter, e.owner(), listing.price(), "portes:location");
-        if(r!=PayResult.OK){ renter.displayClientMessage(Component.literal("§cPaiement refusé : "+r.message()), true); return; }
-        long expiry=System.currentTimeMillis()+listing.days()*86_400_000L;
-        d.rent(l,pos,renter.getUUID(),expiry); SystemeConfigFiles.writeDoors(renter.server,d); ModNetwork.syncDoorLocks(renter.server);
-        renter.displayClientMessage(Component.literal("§aLocation activée pour "+listing.days()+" jour(s). Toutes les portes de cette maison vous sont accessibles."), false);
-    }
 
     public static void handleAction(ServerPlayer player, int action, String text, boolean flag, String extra) {
         OwnerDoorData.DoorKey key = CONTEXTS.get(player.getUUID()); if (key == null) return;
@@ -654,14 +588,8 @@ public final class OwnerDoorManager {
                 if (updated != null) { if (player.hasPermissions(2)) sendAdminPanel(player,level,pos,updated); else sendOwnerPanel(player,level,pos,updated); }
             }
             case 9 -> { if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID())) return; data.clearListing(level,pos); SystemeConfigFiles.writeDoors(player.server,data); ModNetwork.syncDoorLocks(player.server); sendOwnerPanel(player,level,pos,entry); }
-            case 10 -> buy(player,level,pos);
-            case 11 -> rent(player,level,pos);
-            case 17 -> {
-                if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID()) || entry.type() != OwnerDoorData.DoorType.PERSONAL) return;
-                resell(player, level, pos);
-                OwnerDoorData.DoorEntry updated = data.get(level, pos);
-                if (updated != null) sendOwnerPanel(player, level, pos, updated);
-            }
+            // Achat, location et revente : uniquement a l'agence immobiliere.
+            case 10, 11, 17 -> player.displayClientMessage(Component.literal("§cRendez-vous à l'agence immobilière pour acheter, louer ou revendre ce bien."), true);
             // OP-only administration of an already assigned door.
             case 12 -> {
                 if (!player.hasPermissions(2) || entry == null) return;

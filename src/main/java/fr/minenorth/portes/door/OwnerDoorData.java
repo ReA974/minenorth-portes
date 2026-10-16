@@ -150,6 +150,8 @@ public class OwnerDoorData extends SavedData {
         return pos;
     }
 
+    public DoorEntry entry(DoorKey key) { return doors.get(key); }
+
     public DoorEntry get(ServerLevel level, BlockPos pos) { return doors.get(new DoorKey(level.dimension(), normalize(level, pos))); }
 
     public void assign(ServerLevel level, BlockPos pos, UUID uuid, String name, boolean temporary, DoorType type, String permission) {
