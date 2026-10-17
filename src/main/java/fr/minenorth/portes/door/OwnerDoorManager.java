@@ -596,6 +596,11 @@ public final class OwnerDoorManager {
             case 8 -> { if (entry == null || (!player.hasPermissions(2) && (entry.owner() == null || !entry.owner().equals(player.getUUID())))) return; long cents=price(text); int days=0; String house=""; try { int sep=extra.indexOf('|'); if(sep>=0){days=Integer.parseInt(extra.substring(0,sep).trim()); house=extra.substring(sep+1).trim();} else days=Integer.parseInt(extra.trim()); } catch(Exception ex){} if(cents>0&&days>0) listRental(player,pos,cents,days,house); if(player.hasPermissions(2)) sendAdminPanel(player,level,pos,data.get(level,pos)); else sendOwnerPanel(player,level,pos,data.get(level,pos)); }
             case 15 -> {
                 if (entry == null || (!player.hasPermissions(2) && (entry.owner() == null || !entry.owner().equals(player.getUUID())))) return;
+                if (!player.hasPermissions(2) && WorldGuardBridge.isActive()
+                        && !WorldGuardBridge.regionName(text == null ? "" : text.trim()).equals(WorldGuardBridge.regionName(entry.houseName() == null ? "" : entry.houseName().trim()))) {
+                    player.displayClientMessage(Component.literal("§cSeul le staff peut renommer une maison : sa région WorldGuard porte ce nom."), true);
+                    return;
+                }
                 data.setHouseName(level,pos,text);
                 SystemeConfigFiles.writeDoors(player.server,data); ModNetwork.syncDoorLocks(player.server);
                 OwnerDoorData.DoorEntry updated=data.get(level,pos);

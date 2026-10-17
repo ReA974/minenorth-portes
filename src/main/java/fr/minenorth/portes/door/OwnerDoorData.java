@@ -281,11 +281,18 @@ public class OwnerDoorData extends SavedData {
         return false;
     }
 
+    /** Nom de maison propre : sans caracteres de controle, 48 caracteres au plus (il finit dans porte.toml et dans un nom de region WorldGuard). */
+    public static String cleanHouseName(String houseName) {
+        if (houseName == null) return "";
+        String h = houseName.replaceAll("[\\p{Cntrl}\\p{Cf}]", " ").trim();
+        return h.length() > 48 ? h.substring(0, 48).trim() : h;
+    }
+
     public void setHouseName(ServerLevel level, BlockPos pos, String houseName) {
         DoorKey key = new DoorKey(level.dimension(), normalize(level, pos));
         DoorEntry e = doors.get(key);
         if (e == null) return;
-        String house = houseName == null ? "" : houseName.trim();
+        String house = cleanHouseName(houseName);
         doors.put(key, new DoorEntry(e.owner(), e.temporary(), e.ownerName(), e.type(), e.permission(), house, e.purchasePrice(), e.security()));
         DoorListing l = listings.get(key);
         if (l != null) listings.put(key, new DoorListing(l.mode(), l.price(), l.days(), l.renter(), l.expiryMs(), house, l.renterCompany()));
