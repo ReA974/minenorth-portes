@@ -10,6 +10,7 @@ import fr.minenorth.portes.door.OwnerDoorData.DoorKey;
 import fr.minenorth.portes.door.OwnerDoorData.DoorListing;
 import fr.minenorth.portes.door.OwnerDoorData.ListingMode;
 import fr.minenorth.portes.door.WorldGuardBridge;
+import fr.minenorth.portes.door.MapBridge;
 import fr.minenorth.portes.network.ModNetwork;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -189,11 +190,33 @@ public final class AgencyService {
         return n;
     }
 
+    /** Local d'entreprise (acheté ou loué en cours) : entreprise, dimension, nom du bien et position de sa porte de référence. */
+    public record CompanyBuilding(int companyId, String dimension, String houseName, int x, int y, int z) {}
+
+    /** Tous les locaux détenus par une entreprise (achat ou location en cours), pour la carte. */
+    public static List<CompanyBuilding> companyBuildings(MinecraftServer s) {
+        OwnerDoorData d = OwnerDoorData.get(s.overworld());
+        List<CompanyBuilding> out = new ArrayList<>();
+        for (House h : houses(d)) {
+            DoorEntry e = d.entry(h.first());
+            if (e == null) continue;
+            int cid = 0;
+            DoorListing l = listing(d, h);
+            if (companyDoor(e)) cid = EntrepriseCompat.id(e.permission());
+            else if (l != null && l.mode() == ListingMode.RENTAL && l.rentalActive() && l.renterCompany() > 0) cid = l.renterCompany();
+            if (cid <= 0) continue;
+            BlockPos p = h.first().pos();
+            out.add(new CompanyBuilding(cid, h.dimension(), h.name(), p.getX(), p.getY(), p.getZ()));
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------ actions
 
     private static void persist(MinecraftServer s, OwnerDoorData d) {
         SystemeConfigFiles.writeDoors(s, d);
         ModNetwork.syncDoorLocks(s);
+        MapBridge.refresh(s);   // la carte pose / retire le point du local tout de suite
     }
 
     private static String euros(long cents) { return String.format(Locale.FRANCE, "%.2f €", cents / 100.0); }
