@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * Réglages des gangs : config/Minenorth-portes/minenorth_gangs.toml (créé au premier lancement, relu par /gang recharger (OP)).
- * Les montants sont en CENTIMES. Valeurs hors limites : ramenées dans une plage raisonnable.
+ * Les prix sont écrits en EUROS dans le fichier (convertis en centimes ici). Valeurs hors limites : ramenées dans une plage raisonnable.
  */
 public final class GangConfig {
     private GangConfig() {}
@@ -21,27 +21,36 @@ public final class GangConfig {
 
     private static void def(String key, String value, String comment) { DEFAULTS.put(key, new String[]{value, comment}); }
 
+    private static final Map<String, String> SECTIONS = new LinkedHashMap<>();
+
+    private static void section(String firstKey, String title) { SECTIONS.put(firstKey, title); }
+
     static {
-        def("creation_cout_centimes", "50000", "Prix de création d'un gang, prélevé sur la carte du créateur (0 = gratuit)");
-        def("creation_min_joueurs_connectes", "0", "Nombre minimum de joueurs connectés sur le serveur pour créer un gang (0 = aucun)");
-        def("membres_max", "30", "Nombre maximum de membres par gang");
-        def("invitation_secondes", "120", "Durée de validité d'une invitation");
-        def("delai_apres_depart_minutes", "5", "Attente avant de rejoindre ou créer un autre gang après en être parti (anti-aller-retour)");
-        def("portes_max", "12", "Nombre maximum de portes par gang");
-        def("coffres_max", "3", "Nombre maximum de blocs « Coffre de gang » par gang (ils ouvrent tous le même coffre commun)");
-        def("base_rayon", "32", "Une porte libre ne peut rejoindre un gang que si un Coffre de gang du gang est à moins de ce rayon (blocs)");
-        def("crochetage_portes_gang", "true", "Les portes de gang peuvent être crochetées par d'autres joueurs (le gang est prévenu)");
-        def("crochetage_chance_pourcent", "35", "Chance de réussite du crochetage d'une porte de gang (si le mini-jeu est gagné)");
-        def("journal_coffre_max", "200", "Nombre de lignes gardées dans le journal du coffre commun");
-        def("capture_secondes", "120", "Temps à tenir une zone (secondes) pour la capturer");
-        def("capture_min_membres", "2", "Membres du même gang à présenter dans la zone pour la capturer");
-        def("capture_recul_secondes", "2", "Vitesse à laquelle la capture redescend quand le gang attaquant est parti ou trop peu nombreux");
-        def("capture_protection_minutes", "10", "Après une prise, la zone ne peut pas être reprise pendant ce temps");
-        def("revenu_intervalle_minutes", "10", "Un gang qui tient une zone touche son revenu à cet intervalle");
-        def("revenu_par_zone_centimes", "2000", "Revenu versé par zone et par intervalle sur le compte bancaire du chef (0 = aucun revenu)");
-        def("revenu_plafond_heure_centimes", "12000", "Plafond de revenu par gang et par heure (0 = pas de plafond)");
-        def("revenu_necessite_en_ligne", "true", "Le revenu n'est versé que si au moins un membre du gang est connecté");
-        def("territoire_alerte_secondes", "30", "Délai minimum entre deux messages « contesté / il vous manque des membres » pour un même joueur");
+        section("creation_prix_euros", "CRÉATION ET MEMBRES");
+        def("creation_prix_euros", "500", "Prix pour créer un gang, en euros (0 = gratuit). Prélevé sur la carte du créateur.");
+        def("creation_min_joueurs_connectes", "0", "Joueurs minimum connectés sur le serveur pour pouvoir créer un gang (0 = pas de minimum).");
+        def("membres_max", "30", "Nombre maximum de membres par gang.");
+        def("invitation_secondes", "120", "Combien de temps une invitation reste valable, en secondes.");
+        def("delai_apres_depart_minutes", "5", "Minutes à attendre avant de rejoindre ou créer un autre gang après être parti d'un gang.");
+        section("portes_max", "BASE, PORTES ET COFFRES");
+        def("portes_max", "12", "Nombre maximum de portes qu'un gang peut posséder.");
+        def("coffres_max", "3", "Nombre maximum de « Coffres de gang » par gang (ils ouvrent tous le même coffre commun).");
+        def("base_rayon", "32", "Distance en blocs : une porte ne peut rejoindre un gang que si un Coffre de gang est à moins de cette distance.");
+        def("journal_coffre_max", "200", "Nombre de lignes gardées dans l'historique du coffre commun.");
+        section("crochetage_portes_gang", "CROCHETAGE DES PORTES DE GANG");
+        def("crochetage_portes_gang", "true", "true = les autres joueurs peuvent crocheter les portes d'un gang (le gang est prévenu). false = impossible.");
+        def("crochetage_chance_pourcent", "35", "Chance de réussite en % (1 à 100), une fois le mini-jeu gagné.");
+        section("capture_secondes", "ZONES (TERRITOIRES) : CAPTURE");
+        def("capture_secondes", "120", "Secondes à tenir la zone pour la capturer.");
+        def("capture_min_membres", "2", "Nombre de membres du même gang à présenter dans la zone pour la capturer.");
+        def("capture_recul_secondes", "2", "Vitesse à laquelle la capture redescend quand les attaquants partent (plus petit = plus lent).");
+        def("capture_protection_minutes", "10", "Minutes pendant lesquelles une zone ne peut pas être reprise après une capture.");
+        def("territoire_alerte_secondes", "30", "Secondes minimum entre deux messages d'alerte de zone pour un même joueur.");
+        section("revenu_intervalle_minutes", "ZONES (TERRITOIRES) : REVENUS");
+        def("revenu_intervalle_minutes", "10", "Toutes les X minutes, un gang qui tient une zone touche son revenu.");
+        def("revenu_par_zone_euros", "20", "Revenu en euros par zone et par versement, sur le compte du chef (0 = aucun revenu).");
+        def("revenu_plafond_heure_euros", "120", "Maximum en euros qu'un gang peut toucher par heure (0 = pas de plafond).");
+        def("revenu_necessite_en_ligne", "true", "true = le revenu n'est versé que si au moins un membre du gang est connecté.");
     }
 
     private static Path file() { return SystemeConfigFiles.getRoot().resolve("minenorth_gangs.toml"); }
@@ -53,10 +62,14 @@ public final class GangConfig {
             Files.createDirectories(f.getParent());
             if (!Files.exists(f)) {
                 java.util.List<String> lines = new java.util.ArrayList<>();
-                lines.add("# Gangs MineNorth. Montants en centimes. Rechargement : /gang recharger");
+                lines.add("# ===== GANGS MINENORTH =====");
+                lines.add("# Modifie seulement le nombre (ou true / false) après le « = ». Les prix sont en euros.");
+                lines.add("# Après modification : /gang recharger (opérateur), pas besoin de redémarrer.");
                 lines.add("");
                 for (var e : DEFAULTS.entrySet()) {
-                    lines.add("# " + e.getValue()[1]);
+                    String sec = SECTIONS.get(e.getKey());
+                    if (sec != null) { lines.add("# ------------------------------------------------------------"); lines.add("# " + sec); lines.add("# ------------------------------------------------------------"); lines.add(""); }
+                    lines.add("# " + e.getValue()[1] + "  (défaut : " + e.getValue()[0] + ")");
                     String v = e.getValue()[0];
                     lines.add(e.getKey() + " = " + v);
                     lines.add("");
@@ -91,7 +104,7 @@ public final class GangConfig {
 
     private static boolean flag(String key) { return raw(key).equalsIgnoreCase("true"); }
 
-    public static long creationCost() { return num("creation_cout_centimes", 0, 100_000_000L); }
+    public static long creationCost() { return num("creation_prix_euros", 0, 1_000_000L) * 100L; }
     public static int creationMinOnline() { return (int) num("creation_min_joueurs_connectes", 0, 200); }
     public static int membersMax() { return (int) num("membres_max", 2, 200); }
     public static long inviteMs() { return num("invitation_secondes", 10, 3600) * 1000L; }
@@ -107,8 +120,8 @@ public final class GangConfig {
     public static int captureDecay() { return (int) num("capture_recul_secondes", 0, 60); }
     public static long captureProtectionMs() { return num("capture_protection_minutes", 0, 1440) * 60_000L; }
     public static long incomeIntervalMs() { return num("revenu_intervalle_minutes", 1, 1440) * 60_000L; }
-    public static long incomePerZone() { return num("revenu_par_zone_centimes", 0, 10_000_000L); }
-    public static long incomeCapPerHour() { return num("revenu_plafond_heure_centimes", 0, 100_000_000L); }
+    public static long incomePerZone() { return num("revenu_par_zone_euros", 0, 100_000L) * 100L; }
+    public static long incomeCapPerHour() { return num("revenu_plafond_heure_euros", 0, 1_000_000L) * 100L; }
     public static boolean incomeNeedsOnline() { return flag("revenu_necessite_en_ligne"); }
     public static long alertMs() { return num("territoire_alerte_secondes", 5, 600) * 1000L; }
 }
