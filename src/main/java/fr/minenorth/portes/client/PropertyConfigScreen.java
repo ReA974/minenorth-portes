@@ -1,18 +1,20 @@
 package fr.minenorth.portes.client;
 
+import fr.minenorth.portes.agency.PropertyCategory;
 import fr.minenorth.portes.network.ModNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-/** Fiche d'agence d'un bien (admin) : catégorie, meublé, description, captures d'aperçu. S'ouvre depuis le panneau de porte. */
+/** Fiche d'agence d'un bien (admin) : catégorie, meublé, description, photos d'aperçu. S'ouvre depuis le panneau de porte. */
 public class PropertyConfigScreen extends Screen {
-    private static final int W = 420, H = 270;
+    private static final int W = 420, H = 300, PER_ROW = 4;
     private final ModNetwork.DoorPanelPacket data;
     private String category;
     private boolean furnished;
     private EditBox description;
+    private MineNorthButton photoButton;
 
     public PropertyConfigScreen(ModNetwork.DoorPanelPacket data) {
         super(Component.literal("Fiche d'agence"));
@@ -33,33 +35,31 @@ public class PropertyConfigScreen extends Screen {
     protected void init() {
         super.init();
         int x = left(), y = top();
-        int third = (W - 40 - 24) / 4;
-        String[][] cats = {{"HOUSE", "MAISON"}, {"APARTMENT", "APPART."}, {"BUSINESS", "ENTREPRISE"}, {"LOCAL", "LOCAL"}};
+        int bw = (W - 40 - (PER_ROW - 1) * 8) / PER_ROW;
+        PropertyCategory[] cats = PropertyCategory.values();
         for (int i = 0; i < cats.length; i++) {
-            final String id = cats[i][0];
-            addRenderableWidget(new MineNorthButton(x + 20 + i * (third + 8), y + 62, third, 22, Component.literal(cats[i][1]),
-                    category.equals(id) ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> { category = id; rebuildWidgets(); }));
+            final PropertyCategory c = cats[i];
+            addRenderableWidget(new MineNorthButton(x + 20 + (i % PER_ROW) * (bw + 8), y + 62 + (i / PER_ROW) * 26, bw, 22, Component.literal(c.shortLabel()),
+                    category.equals(c.name()) ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> { category = c.name(); rebuildWidgets(); }));
         }
-        addRenderableWidget(new MineNorthButton(x + 20, y + 98, W - 40, 22, Component.literal(furnished ? "MEUBLÉ : OUI" : "MEUBLÉ : NON"),
+        addRenderableWidget(new MineNorthButton(x + 20, y + 120, W - 40, 22, Component.literal(furnished ? "MEUBLÉ : OUI" : "MEUBLÉ : NON"),
                 furnished ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> { furnished = !furnished; rebuildWidgets(); }));
         String keep = description == null ? data.description() : description.getValue();
-        description = new EditBox(font, x + 20, y + 144, W - 40, 20, Component.literal("Description"));
+        description = new EditBox(font, x + 20, y + 162, W - 40, 20, Component.literal("Description"));
         description.setMaxLength(200);
         description.setHint(Component.literal("Configuration, pièces, remarques…"));
         description.setValue(keep == null ? "" : keep);
         addRenderableWidget(description);
         int half = (W - 48) / 2;
-        photoButton = addRenderableWidget(new MineNorthButton(x + 20, y + 178, half, 22, Component.literal("PRENDRE LES 3 PHOTOS"), MineNorthStyle.CYAN, this::capture)
+        photoButton = addRenderableWidget(new MineNorthButton(x + 20, y + 196, half, 22, Component.literal("PRENDRE LES 3 PHOTOS"), MineNorthStyle.CYAN, this::capture)
                 .enabled(!dirty()));
         description.setResponder(s -> photoButton.enabled(!dirty()));
-        addRenderableWidget(new MineNorthButton(x + 28 + half, y + 178, half, 22, Component.literal("EFFACER LES CAPTURES"), MineNorthStyle.PINK,
+        addRenderableWidget(new MineNorthButton(x + 28 + half, y + 196, half, 22, Component.literal("EFFACER LES CAPTURES"), MineNorthStyle.PINK,
                 () -> send(23, "", "")).enabled(data.imageCount() > 0));
-        addRenderableWidget(new MineNorthButton(x + 20, y + 234, half, 28, Component.literal("ENREGISTRER"), MineNorthStyle.GREEN,
+        addRenderableWidget(new MineNorthButton(x + 20, y + 262, half, 28, Component.literal("ENREGISTRER"), MineNorthStyle.GREEN,
                 () -> send(22, category + "|" + (furnished ? "1" : "0"), description.getValue())));
-        addRenderableWidget(new MineNorthButton(x + 28 + half, y + 234, half, 28, Component.literal("FERMER"), MineNorthButton.GHOST, this::onClose));
+        addRenderableWidget(new MineNorthButton(x + 28 + half, y + 262, half, 28, Component.literal("FERMER"), MineNorthButton.GHOST, this::onClose));
     }
-
-    private MineNorthButton photoButton;
 
     /** Vrai si la fiche modifiée à l'écran n'est pas encore enregistrée. */
     private boolean dirty() {
@@ -79,9 +79,9 @@ public class PropertyConfigScreen extends Screen {
         int x = left(), y = top();
         MineNorthStyle.panel(g, x, y, W, H, "FICHE D'AGENCE", data.houseName().toUpperCase());
         g.drawString(font, "CATÉGORIE", x + 20, y + 50, MineNorthStyle.BLUE, false);
-        g.drawString(font, "DESCRIPTION", x + 20, y + 132, MineNorthStyle.BLUE, false);
-        g.drawString(font, "Photos : " + data.imageCount() + " / 3 — enregistrez la fiche, placez-vous devant le bien,", x + 20, y + 204, MineNorthStyle.MUTED, false);
-        g.drawString(font, "puis clic droit pour chaque photo (les 3 remplacent les anciennes).", x + 20, y + 214, MineNorthStyle.MUTED, false);
+        g.drawString(font, "DESCRIPTION", x + 20, y + 150, MineNorthStyle.BLUE, false);
+        g.drawString(font, "Photos : " + data.imageCount() + " / 3 — enregistrez la fiche, placez-vous devant le bien,", x + 20, y + 226, MineNorthStyle.MUTED, false);
+        g.drawString(font, "puis clic droit pour chaque photo (les 3 remplacent les anciennes).", x + 20, y + 237, MineNorthStyle.MUTED, false);
         super.render(g, mx, my, pt);
     }
 

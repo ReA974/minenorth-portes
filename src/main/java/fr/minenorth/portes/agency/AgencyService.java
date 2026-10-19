@@ -114,6 +114,7 @@ public final class AgencyService {
             DoorListing l = listing(d, h);
             if (available(l)) out.add(view(d, infos, h, l, 0));
         }
+        out.sort((a, b) -> NameOrder.compare(a.houseName(), b.houseName()));
         return out;
     }
 
@@ -123,6 +124,7 @@ public final class AgencyService {
         PropertyInfoData infos = PropertyInfoData.get(s.overworld());
         List<PropertyView> out = new ArrayList<>();
         for (House h : houses(d)) out.add(view(d, infos, h, listing(d, h), d.housePurchasePrice(h.first())));
+        out.sort((a, b) -> NameOrder.compare(a.houseName(), b.houseName()));
         return out;
     }
 
@@ -158,6 +160,7 @@ public final class AgencyService {
                 out.add(new OwnedView(view(d, infos, h, l, purchase), false, 0, purchase, 0, ""));
             }
         }
+        out.sort((a, b) -> NameOrder.compare(a.view().houseName(), b.view().houseName()));
         return out;
     }
 
@@ -243,7 +246,7 @@ public final class AgencyService {
         DoorEntry e = d.entry(h.first());
         if (e != null && e.owner() != null && e.owner().equals(p.getUUID())) return AgencyResult.fail("Vous possédez déjà ce bien.");
         PropertyCategory cat = PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name()).category();
-        boolean business = cat == PropertyCategory.BUSINESS;
+        boolean business = cat.companyOnly();
         long price = l.price();
         String source = rental ? "portes:location" : "portes:achat";
         DoorKey key = h.first();
@@ -256,7 +259,7 @@ public final class AgencyService {
             r = payCompany(p, companyId, price, source);
         } else {
             if (!ImmoRules.canAcquire(cat, heldCount(s, p.getUUID(), cat))) {
-                return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + switch (cat) { case APARTMENT -> " appartements."; case LOCAL -> " locaux particuliers."; default -> " maisons."; });
+                return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + " biens de type « " + cat.label() + " ».");
             }
             r = payPersonal(p, e == null ? null : e.owner(), price, source);
         }

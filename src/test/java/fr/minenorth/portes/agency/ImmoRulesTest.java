@@ -22,5 +22,18 @@ class ImmoRulesTest {
         assertEquals(2, ImmoRules.limit(PropertyCategory.LOCAL));
         assertNotEquals(PropertyCategory.BUSINESS, PropertyCategory.LOCAL);
     }
+    @Test void allEightCategoriesExistWithFrenchLabels() {
+        assertEquals(8, PropertyCategory.values().length);
+        assertEquals(PropertyCategory.SMALL_SHOP, PropertyCategory.from("small_shop"));
+        assertEquals(PropertyCategory.STORAGE, PropertyCategory.from("STORAGE"));
+        assertEquals(PropertyCategory.GARAGE, PropertyCategory.from("garage"));
+        assertEquals(PropertyCategory.OTHER, PropertyCategory.from("other"));
+        assertEquals("Petit commerce", PropertyCategory.SMALL_SHOP.label());
+        assertEquals("AUTRES", PropertyCategory.OTHER.shortLabel());
+        for (PropertyCategory c : PropertyCategory.values()) { assertFalse(c.label().isBlank()); assertFalse(c.shortLabel().isBlank()); }
+    }
+    @Test void onlyBusinessIsReservedToCompanies() {
+        for (PropertyCategory c : PropertyCategory.values()) assertEquals(c == PropertyCategory.BUSINESS, c.companyOnly());
+    }
     @Test void unknownCategoryDefaultsToHouse() { assertEquals(PropertyCategory.HOUSE, PropertyCategory.from("bogus")); assertEquals(PropertyCategory.BUSINESS, PropertyCategory.from("business")); }
 }
