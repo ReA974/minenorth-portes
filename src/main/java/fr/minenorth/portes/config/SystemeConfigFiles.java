@@ -173,5 +173,8 @@ public final class SystemeConfigFiles {
     }
 
     public static Path getRoot() { return ROOT; }
-    private static String escape(String value) { return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\""); }
+    private static String escape(String value) {
+        // Les caracteres de controle (dont \n et \r) sont remplaces : le fichier est lu ligne par ligne, une ligne glissee dans une valeur serait une injection.
+        return value == null ? "" : value.replaceAll("[\\p{Cntrl}\\p{Cf}]", " ").replace("\\", "\\\\").replace("\"", "\\\"");
+    }
 }

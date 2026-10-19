@@ -68,6 +68,9 @@ public final class WorldGuardBridge {
     private static Cfg cfg = new Cfg();
     private static int counter;
 
+    /** Le pont WorldGuard est-il actif ? (le nom d'une maison désigne alors une région : seul le staff peut le changer) */
+    public static boolean isActive() { return cfg.actif; }
+
     /** Ce que le pont a déjà appliqué : région -> (uuid -> pseudo). Sauvegardé avec le monde. */
     public static final class Applied extends SavedData {
         private static final String NAME = "minenorth_portes_wg";
