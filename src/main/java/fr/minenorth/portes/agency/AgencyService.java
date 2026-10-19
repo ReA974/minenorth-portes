@@ -181,13 +181,14 @@ public final class AgencyService {
         return n;
     }
 
-    /** Biens (achats + locations en cours) d'une entreprise. */
-    public static int heldCountCompany(MinecraftServer s, int companyId) {
+    /** Biens (achats + locations en cours) d'une entreprise dans une catégorie. */
+    public static int heldCountCompany(MinecraftServer s, int companyId, PropertyCategory category) {
+        PropertyInfoData infos = PropertyInfoData.get(s.overworld());
         OwnerDoorData d = OwnerDoorData.get(s.overworld());
         int n = 0;
         for (House h : houses(d)) {
             DoorEntry e = d.entry(h.first());
-            if (e != null && companyDoor(e) && EntrepriseCompat.id(e.permission()) == companyId) n++;
+            if (e != null && companyDoor(e) && EntrepriseCompat.id(e.permission()) == companyId && infos.info(d, h.dimension(), h.name()).category() == category) n++;
         }
         return n;
     }
@@ -246,16 +247,17 @@ public final class AgencyService {
         DoorEntry e = d.entry(h.first());
         if (e != null && e.owner() != null && e.owner().equals(p.getUUID())) return AgencyResult.fail("Vous possédez déjà ce bien.");
         PropertyCategory cat = PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name()).category();
-        boolean business = cat.companyOnly();
+        // Entreprise : obligatoire pour un local d'entreprise, au choix (companyId > 0) pour local, stockage et garage ; ignorée sinon.
+        boolean asCompany = cat.companyOnly() || (cat.companyOptional() && companyId > 0);
         long price = l.price();
         String source = rental ? "portes:location" : "portes:achat";
         DoorKey key = h.first();
         PayResult r;
-        if (business && e != null && e.owner() != null) return AgencyResult.fail("Ce bien appartient à un joueur : une entreprise ne peut pas l'acquérir.");
-        if (business) {
+        if (asCompany && e != null && e.owner() != null) return AgencyResult.fail("Ce bien appartient à un joueur : une entreprise ne peut pas l'acquérir.");
+        if (asCompany) {
             String err = companyError(p, companyId);
             if (err != null) return AgencyResult.fail(err);
-            if (!ImmoRules.canAcquire(cat, heldCountCompany(s, companyId))) return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + " locaux d'entreprise.");
+            if (!ImmoRules.canAcquire(cat, heldCountCompany(s, companyId, cat))) return AgencyResult.fail("Limite atteinte pour cette entreprise : " + ImmoRules.limit(cat) + " biens de type « " + cat.label() + " ».");
             r = payCompany(p, companyId, price, source);
         } else {
             if (!ImmoRules.canAcquire(cat, heldCount(s, p.getUUID(), cat))) {
@@ -266,9 +268,9 @@ public final class AgencyService {
         if (r != PayResult.OK) return AgencyResult.fail("Paiement refusé : " + r.message());
         try {
             if (rental) {
-                String name = business ? EntrepriseCompat.name(s, companyId) : "";
-                d.rentHouse(key, p.getUUID(), business ? companyId : 0, name, System.currentTimeMillis() + l.days() * DAY_MS);
-            } else if (business) {
+                String name = asCompany ? EntrepriseCompat.name(s, companyId) : "";
+                d.rentHouse(key, p.getUUID(), asCompany ? companyId : 0, name, System.currentTimeMillis() + l.days() * DAY_MS);
+            } else if (asCompany) {
                 d.transferHouseToCompany(key, companyId, EntrepriseCompat.name(s, companyId), price);
             } else {
                 d.transferHouse(key, p.getUUID(), p.getGameProfile().getName(), price);
@@ -276,7 +278,7 @@ public final class AgencyService {
             persist(s, d);
         } catch (RuntimeException ex) {
             // Paiement fait mais bien non attribué : on rembourse.
-            if (business) MineNorth.bank().refund(s, EntrepriseCompat.accountId(s, companyId), price, "portes:annulation");
+            if (asCompany) MineNorth.bank().refund(s, EntrepriseCompat.accountId(s, companyId), price, "portes:annulation");
             else MineNorth.bank().refund(s, p.getUUID(), price, "portes:annulation");
             return AgencyResult.fail("Une erreur est survenue, vous avez été remboursé.");
         }

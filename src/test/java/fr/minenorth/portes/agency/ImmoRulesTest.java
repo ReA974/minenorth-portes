@@ -35,5 +35,12 @@ class ImmoRulesTest {
     @Test void onlyBusinessIsReservedToCompanies() {
         for (PropertyCategory c : PropertyCategory.values()) assertEquals(c == PropertyCategory.BUSINESS, c.companyOnly());
     }
+    @Test void localStorageAndGarageCanBeBoughtByCompanyOrPlayer() {
+        for (PropertyCategory c : PropertyCategory.values()) {
+            boolean optional = c == PropertyCategory.LOCAL || c == PropertyCategory.STORAGE || c == PropertyCategory.GARAGE;
+            assertEquals(optional, c.companyOptional(), c.name());
+            assertEquals(optional || c == PropertyCategory.BUSINESS, c.companyAllowed(), c.name());
+        }
+    }
     @Test void unknownCategoryDefaultsToHouse() { assertEquals(PropertyCategory.HOUSE, PropertyCategory.from("bogus")); assertEquals(PropertyCategory.BUSINESS, PropertyCategory.from("business")); }
 }
