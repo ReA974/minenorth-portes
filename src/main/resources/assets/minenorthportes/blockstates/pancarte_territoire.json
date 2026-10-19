@@ -1,0 +1,20 @@
+{
+ "variants": {
+  "facing=north": {
+   "model": "minenorthportes:block/pancarte_territoire",
+   "y": 0
+  },
+  "facing=east": {
+   "model": "minenorthportes:block/pancarte_territoire",
+   "y": 90
+  },
+  "facing=south": {
+   "model": "minenorthportes:block/pancarte_territoire",
+   "y": 180
+  },
+  "facing=west": {
+   "model": "minenorthportes:block/pancarte_territoire",
+   "y": 270
+  }
+ }
+}

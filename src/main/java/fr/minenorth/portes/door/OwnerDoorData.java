@@ -27,7 +27,7 @@ public class OwnerDoorData extends SavedData {
     private final Map<DoorKey, DoorListing> listings = new HashMap<>();
 
     public enum DoorType {
-        PERSONAL, POLICE, POMPIER, ENTREPRISE, ORGANISATION, MAIRIE;
+        PERSONAL, POLICE, POMPIER, ENTREPRISE, ORGANISATION, MAIRIE, GANG;
         public static DoorType from(String value) {
             try { return valueOf(value.toUpperCase(Locale.ROOT)); } catch (Exception e) { return PERSONAL; }
         }

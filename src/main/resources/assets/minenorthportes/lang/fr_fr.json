@@ -2,5 +2,7 @@
   "item.minenorthportes.lockpick": "Crochet",
   "item.minenorthportes.serrure_normal": "Serrure renforcée (Normal)",
   "item.minenorthportes.serrure_avancee": "Serrure renforcée (Avancée)",
-  "item.minenorthportes.serrure_expert": "Serrure renforcée (Experte)"
+  "item.minenorthportes.serrure_expert": "Serrure renforcée (Experte)",
+  "block.minenorthportes.coffre_gang": "Coffre de gang",
+  "block.minenorthportes.pancarte_territoire": "Pancarte de territoire"
 }

@@ -14,5 +14,7 @@ public class MineNorthPortes {
         SystemeConfigFiles.init();
         ModNetwork.register();
         ModItems.register(FMLJavaModLoadingContext.get().getModEventBus());
+        fr.minenorth.portes.gang.GangConfig.load();
+        fr.minenorth.portes.gang.GangBlocks.register(FMLJavaModLoadingContext.get().getModEventBus());
     }
 }

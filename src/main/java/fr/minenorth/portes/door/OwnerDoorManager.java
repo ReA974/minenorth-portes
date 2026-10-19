@@ -46,6 +46,7 @@ public final class OwnerDoorManager {
 
     private static void registerPermission(PermissionGatherEvent.Nodes event, String permission) {
         if (permission == null || permission.isBlank() || PERMISSION_NODES.containsKey(permission)) return;
+        if (permission.startsWith(fr.minenorth.portes.gang.GangDoors.PREFIX)) return; // portes de gang : le droit vient du gang, pas d'un noeud de permission
         PermissionNode<Boolean> node = new PermissionNode<>("minenorthportes", permission, PermissionTypes.BOOLEAN, (player, uuid, context) -> player != null && player.hasPermissions(2));
         PERMISSION_NODES.put(permission, node);
         event.addNodes(node);
@@ -57,6 +58,7 @@ public final class OwnerDoorManager {
         if (!(l.getBlockState(pos).getBlock() instanceof DoorBlock)) return;
         OwnerDoorData d = OwnerDoorData.get(l);
         OwnerDoorData.DoorEntry entry = d.get(l, pos);
+        if (sneaking && fr.minenorth.portes.gang.GangDoors.onSneakClick(p, l, pos, entry)) return;
         if (entry == null) {
             // The client may have stale lock data; only OPs may manage an unassigned door.
             if (sneaking && p.hasPermissions(2)) {
@@ -162,6 +164,12 @@ public final class OwnerDoorManager {
         }
 
         if (p.isShiftKeyDown()) {
+            // Gangs : attribuer une porte libre de la base, ou gérer une porte du gang (les OP gardent le panneau d'administration).
+            if (e.getHand() == InteractionHand.MAIN_HAND && fr.minenorth.portes.gang.GangDoors.onSneakClick(p, l, e.getPos(), entry)) {
+                e.setCanceled(true);
+                e.setCancellationResult(InteractionResult.SUCCESS);
+                return;
+            }
             // A protected door must NEVER receive the vanilla interaction when
             // the player is sneaking. This prevents the door from opening
             // client-side/server-side before the management/request UI is shown.
@@ -273,6 +281,9 @@ public final class OwnerDoorManager {
             case POLICE -> hasPermission(player, "grade.police") || PoliceCompat.isPolice(player);
             case POMPIER -> hasPermission(player, "grade.pompier") || SecoursCompat.isSecours(player);
             case MAIRIE -> hasPermission(player, "grade.mairie") || MairieCompat.isStaff(player);
+            // Porte de gang : tous les membres du gang selon le grade minimum de la porte (recalculé à chaque fois).
+            case GANG -> fr.minenorth.portes.gang.GangDoors.canOpen(player, entry.permission())
+                    || LockpickManager.hasTempAccess(player.getUUID(), new OwnerDoorData.DoorKey(level.dimension(), OwnerDoorData.normalize(level, pos)));
             case ENTREPRISE, ORGANISATION -> EntrepriseCompat.linked(entry.permission())
                     // Porte reliée à une entreprise : patron + employés du grade autorisé (les OP ouvrent toujours).
                     ? player.hasPermissions(2) || EntrepriseCompat.canOpen(player, EntrepriseCompat.id(entry.permission()), EntrepriseCompat.minGrade(entry.permission()))

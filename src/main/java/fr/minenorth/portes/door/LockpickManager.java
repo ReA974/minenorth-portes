@@ -37,9 +37,15 @@ public final class LockpickManager {
         return p.getMainHandItem().is(ModItems.LOCKPICK.get());
     }
 
+    /** Portes crochetables : maisons, et portes de gang si le réglage le permet. */
+    private static boolean pickable(OwnerDoorData.DoorEntry entry) {
+        return entry.type() == OwnerDoorData.DoorType.PERSONAL
+                || (entry.type() == OwnerDoorData.DoorType.GANG && fr.minenorth.portes.gang.GangConfig.lockpickGangDoors());
+    }
+
     /** Porte de maison, que le joueur ne peut pas déjà ouvrir. */
     public static boolean canPick(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry entry) {
-        return entry != null && entry.type() == OwnerDoorData.DoorType.PERSONAL && !OwnerDoorManager.canOpen(p, l, pos, entry);
+        return entry != null && pickable(entry) && !OwnerDoorManager.canOpen(p, l, pos, entry);
     }
 
     /**
@@ -49,14 +55,15 @@ public final class LockpickManager {
     public static boolean tryStart(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry entry) {
         if (entry == null || !holdsLockpick(p)) return false;
         if (OwnerDoorManager.canOpen(p, l, pos, entry)) return false;
-        if (entry.type() != OwnerDoorData.DoorType.PERSONAL) {
+        if (!pickable(entry)) {
             p.displayClientMessage(Component.literal("§cCette porte ne peut pas être crochetée."), true);
             return true;
         }
         if (p.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > MAX_DIST_SQR) return true;
         OwnerDoorData.DoorKey key = new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos));
         SESSIONS.put(p.getUUID(), new Session(key, System.currentTimeMillis() + SESSION_MS));
-        ModNetwork.sendLockpickStart(p, key.pos(), OwnerDoorData.securityOf(entry));
+        if (entry.type() == OwnerDoorData.DoorType.GANG) fr.minenorth.portes.gang.GangDoors.alertLockpick(p, key.pos(), entry);
+        ModNetwork.sendLockpickStart(p, key.pos(), entry.type() == OwnerDoorData.DoorType.GANG ? 2 : OwnerDoorData.securityOf(entry));
         return true;
     }
 
@@ -77,7 +84,7 @@ public final class LockpickManager {
         }
         held.hurtAndBreak(1, p, pl -> pl.broadcastBreakEvent(InteractionHand.MAIN_HAND));
 
-        int chance = OwnerDoorData.PICK_CHANCE[OwnerDoorData.securityOf(entry)];
+        int chance = entry.type() == OwnerDoorData.DoorType.GANG ? fr.minenorth.portes.gang.GangConfig.lockpickChance() : OwnerDoorData.PICK_CHANCE[OwnerDoorData.securityOf(entry)];
         if (!won || RANDOM.nextInt(100) >= chance) {
             p.displayClientMessage(Component.literal("§cLa serrure résiste."), true);
             return;

@@ -1,0 +1,124 @@
+package fr.minenorth.portes.gang;
+
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.SimpleContainer;
+
+import java.util.*;
+
+/** Un gang. L'identité des membres est TOUJOURS leur UUID (jamais le pseudo). Données modifiées uniquement par {@link GangService}. */
+public final class Gang {
+    public static final int VAULT_SLOTS = 54;
+
+    /** Position d'un bloc « Coffre de gang » : dimension + position. */
+    public record ChestPos(String dim, long pos) {}
+
+    /** Ligne du journal du coffre : quand, qui (UUID), quoi. */
+    public record LogEntry(long timeMs, UUID actor, String text) {}
+
+    public final UUID id;
+    String name;
+    String tag;
+    int color;
+    final long created;
+    final Map<UUID, GangRank> members = new LinkedHashMap<>();
+    final Set<ChestPos> chests = new LinkedHashSet<>();
+    final List<LogEntry> log = new ArrayList<>();
+    final SimpleContainer vault = new SimpleContainer(VAULT_SLOTS);
+    /** Début de l'heure en cours pour le plafond de revenu, et somme déjà versée dans cette heure. */
+    long incomeWindowStart;
+    long incomePaid;
+
+    Gang(UUID id, String name, String tag, int color, long created) {
+        this.id = id; this.name = name; this.tag = tag; this.color = color; this.created = created;
+    }
+
+    public String name() { return name; }
+    public String tag() { return tag; }
+    public int color() { return color; }
+    public long created() { return created; }
+    public Map<UUID, GangRank> members() { return Collections.unmodifiableMap(members); }
+    public GangRank rankOf(UUID player) { return player == null ? null : members.get(player); }
+    public boolean isMember(UUID player) { return player != null && members.containsKey(player); }
+    public Set<ChestPos> chests() { return Collections.unmodifiableSet(chests); }
+    public List<LogEntry> log() { return Collections.unmodifiableList(log); }
+    public SimpleContainer vault() { return vault; }
+
+    public UUID chef() {
+        for (var e : members.entrySet()) if (e.getValue() == GangRank.CHEF) return e.getKey();
+        return null;
+    }
+
+    public boolean vaultEmpty() { return vault.isEmpty(); }
+
+    /** Texte coloré « [TAG] Nom » pour le chat. */
+    public String label() { return "§" + GangRules.chatColor(color) + "[" + tag + "] " + name + "§r"; }
+
+    void addLog(UUID actor, String text, int max) {
+        log.add(new LogEntry(System.currentTimeMillis(), actor, text));
+        while (log.size() > max) log.remove(0);
+    }
+
+    CompoundTag save() {
+        CompoundTag t = new CompoundTag();
+        t.putUUID("Id", id);
+        t.putString("Name", name);
+        t.putString("Tag", tag);
+        t.putInt("Color", color);
+        t.putLong("Created", created);
+        ListTag ml = new ListTag();
+        for (var e : members.entrySet()) {
+            CompoundTag m = new CompoundTag();
+            m.putUUID("Uuid", e.getKey());
+            m.putInt("Rank", e.getValue().level());
+            ml.add(m);
+        }
+        t.put("Members", ml);
+        ListTag cl = new ListTag();
+        for (ChestPos c : chests) {
+            CompoundTag c1 = new CompoundTag();
+            c1.putString("Dim", c.dim());
+            c1.putLong("Pos", c.pos());
+            cl.add(c1);
+        }
+        t.put("Chests", cl);
+        ListTag ll = new ListTag();
+        for (LogEntry le : log) {
+            CompoundTag l1 = new CompoundTag();
+            l1.putLong("Time", le.timeMs());
+            if (le.actor() != null) l1.putUUID("Actor", le.actor());
+            l1.putString("Text", le.text());
+            ll.add(l1);
+        }
+        t.put("Log", ll);
+        t.put("Vault", vault.createTag());
+        t.putLong("IncomeStart", incomeWindowStart);
+        t.putLong("IncomePaid", incomePaid);
+        return t;
+    }
+
+    static Gang load(CompoundTag t) {
+        if (!t.hasUUID("Id")) return null;
+        Gang g = new Gang(t.getUUID("Id"), t.getString("Name"), t.getString("Tag"), t.getInt("Color"), t.getLong("Created"));
+        ListTag ml = t.getList("Members", Tag.TAG_COMPOUND);
+        for (int i = 0; i < ml.size(); i++) {
+            CompoundTag m = ml.getCompound(i);
+            if (m.hasUUID("Uuid")) g.members.put(m.getUUID("Uuid"), GangRank.ofLevel(m.getInt("Rank")));
+        }
+        ListTag cl = t.getList("Chests", Tag.TAG_COMPOUND);
+        for (int i = 0; i < cl.size(); i++) g.chests.add(new ChestPos(cl.getCompound(i).getString("Dim"), cl.getCompound(i).getLong("Pos")));
+        ListTag ll = t.getList("Log", Tag.TAG_COMPOUND);
+        for (int i = 0; i < ll.size(); i++) {
+            CompoundTag l1 = ll.getCompound(i);
+            g.log.add(new LogEntry(l1.getLong("Time"), l1.hasUUID("Actor") ? l1.getUUID("Actor") : null, l1.getString("Text")));
+        }
+        g.vault.fromTag(t.getList("Vault", Tag.TAG_COMPOUND));
+        g.incomeWindowStart = t.getLong("IncomeStart");
+        g.incomePaid = t.getLong("IncomePaid");
+        // Sécurité : un gang chargé doit avoir exactement un chef.
+        if (g.members.isEmpty()) return null;
+        if (g.chef() == null) g.members.put(g.members.keySet().iterator().next(), GangRank.CHEF);
+        return g;
+    }
+}
