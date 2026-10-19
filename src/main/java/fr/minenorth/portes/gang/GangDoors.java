@@ -4,7 +4,6 @@ import fr.minenorth.portes.config.SystemeConfigFiles;
 import fr.minenorth.portes.door.OwnerDoorData;
 import fr.minenorth.portes.network.ModNetwork;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -83,7 +82,7 @@ public final class GangDoors {
         BlockPos pos = OwnerDoorData.normalize(l, rawPos);
         OwnerDoorData.DoorEntry e = od.get(l, pos);
         if (e != null && gangId(e.permission()) != null && e.type() == OwnerDoorData.DoorType.GANG) {
-            if (g.id.equals(gangId(e.permission()))) return "Cette porte est déjà au gang (changez son grade avec /gang porte grade).";
+            if (g.id.equals(gangId(e.permission()))) return "Cette porte est déjà au gang (changez son grade dans le menu de la porte).";
             return "Cette porte appartient à un autre gang.";
         }
         if (e != null) {
@@ -117,14 +116,22 @@ public final class GangDoors {
         return false;
     }
 
-    /** Retire la porte du gang : elle redevient une porte libre (non protégée). */
+    /** Retire la porte du gang (le joueur doit être près de la porte) : elle redevient une porte libre. */
     public static String unclaim(ServerPlayer p, BlockPos rawPos) {
-        ServerLevel l = p.serverLevel();
+        if (!near(p, rawPos)) return "Approchez-vous de la porte.";
+        return unclaimAt(p, p.level().dimension().location().toString(), rawPos.asLong());
+    }
+
+    /** Retire une porte du gang depuis la liste de l'écran (sans être devant) : seul le chef ou un lieutenant du gang concerné, ou un OP. */
+    public static String unclaimAt(ServerPlayer p, String dim, long packed) {
+        ServerLevel l = null;
+        for (ServerLevel cand : p.server.getAllLevels()) if (cand.dimension().location().toString().equals(dim)) l = cand;
+        if (l == null) return "Dimension inconnue.";
+        BlockPos rawPos = BlockPos.of(packed);
         Gang g = GangData.get(p.server).gangOf(p.getUUID());
         OwnerDoorData od = OwnerDoorData.get(l);
         OwnerDoorData.DoorEntry e = od.get(l, rawPos);
         if (e == null || e.type() != OwnerDoorData.DoorType.GANG) return "Ce n'est pas une porte de gang.";
-        if (!near(p, rawPos)) return "Approchez-vous de la porte.";
         UUID gid = gangId(e.permission());
         boolean allowed = p.hasPermissions(2) || (g != null && g.id.equals(gid) && g.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT));
         if (!allowed) return "Seuls le chef et les lieutenants du gang peuvent retirer cette porte.";
@@ -132,6 +139,33 @@ public final class GangDoors {
         SystemeConfigFiles.writeDoors(p.server, od);
         ModNetwork.syncDoorLocks(p.server);
         return null;
+    }
+
+    /** Depuis le panneau d'une porte de maison : ouvre la fenêtre « donner cette porte au gang » (chef/lieutenant, porte à soi, à portée). */
+    public static String offerOwnDoor(ServerPlayer p, BlockPos rawPos) {
+        ServerLevel l = p.serverLevel();
+        Gang g = GangData.get(p.server).gangOf(p.getUUID());
+        if (g == null) return "Vous n'êtes dans aucun gang.";
+        if (!g.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT)) return "Seuls le chef et les lieutenants gèrent les portes du gang.";
+        if (!near(p, rawPos) || !(l.getBlockState(rawPos).getBlock() instanceof DoorBlock)) return "Approchez-vous de la porte.";
+        OwnerDoorData.DoorEntry e = OwnerDoorData.get(l).get(l, rawPos);
+        if (e == null || e.type() != OwnerDoorData.DoorType.PERSONAL || !p.getUUID().equals(e.owner())) return "Ce n'est pas votre porte.";
+        GangGui.sendDoor(p, 3, OwnerDoorData.normalize(l, rawPos), GangRank.MEMBRE.level());
+        return null;
+    }
+
+    /** Le gang a changé de nom : les portes affichent le nouveau. */
+    public static void refreshNames(MinecraftServer s, Gang g) {
+        OwnerDoorData od = OwnerDoorData.get(s.overworld());
+        boolean any = false;
+        for (OwnerDoorData.DoorKey k : doorsOf(s, g)) {
+            ServerLevel l = s.getLevel(k.dimension());
+            OwnerDoorData.DoorEntry e = l == null ? null : od.entry(k);
+            if (e == null) continue;
+            od.assign(l, k.pos(), null, g.name, false, OwnerDoorData.DoorType.GANG, e.permission());
+            any = true;
+        }
+        if (any) SystemeConfigFiles.writeDoors(s, od);
     }
 
     public static String setMinRank(ServerPlayer p, BlockPos rawPos, GangRank rank) {
@@ -188,14 +222,10 @@ public final class GangDoors {
         if (mine == null) return false;
         boolean lead = mine.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT);
         BlockPos pos = OwnerDoorData.normalize(l, rawPos);
-        String xyz = pos.getX() + " " + pos.getY() + " " + pos.getZ();
         if (entry == null) {
             if (!lead || !nearOwnChest(mine, l, pos) || OwnerDoorData.get(l).listing(l, pos) != null) return false;
             if (!GangService.allow(p.getUUID(), "portemsg", 700)) return true;
-            Component msg = Component.literal("§7Porte libre près de votre base. ")
-                    .append(button("§a[Attribuer au gang]", "/gang porte ajouter membre " + xyz))
-                    .append(button(" §e[Lieutenants seulement]", "/gang porte ajouter lieutenant " + xyz));
-            p.sendSystemMessage(msg);
+            GangGui.sendDoor(p, 1, pos, GangRank.MEMBRE.level());
             return true;
         }
         if (entry.type() != OwnerDoorData.DoorType.GANG || !mine.id.equals(gangId(entry.permission()))) return false;
@@ -205,17 +235,8 @@ public final class GangDoors {
             p.displayClientMessage(Component.literal("§7Porte de " + mine.name() + " - ouverte aux grades : " + min.label().toLowerCase(java.util.Locale.ROOT) + " et plus."), true);
             return true;
         }
-        Component msg = Component.literal("§7Porte du gang (" + min.label().toLowerCase(java.util.Locale.ROOT) + "+). ")
-                .append(button("§c[Retirer]", "/gang porte retirer " + xyz))
-                .append(button(" §e[Membres]", "/gang porte grade membre " + xyz))
-                .append(button(" §6[Lieutenants]", "/gang porte grade lieutenant " + xyz))
-                .append(button(" §4[Chef]", "/gang porte grade chef " + xyz));
-        p.sendSystemMessage(msg);
+        GangGui.sendDoor(p, 2, pos, min.level());
         return true;
-    }
-
-    private static Component button(String text, String command) {
-        return Component.literal(text).withStyle(st -> st.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command)));
     }
 
     // ------------------------------------------------------------------ crochetage

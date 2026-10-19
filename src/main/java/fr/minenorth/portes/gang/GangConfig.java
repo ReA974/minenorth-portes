@@ -10,7 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Réglages des gangs : config/Minenorth-portes/minenorth_gangs.toml (créé au premier lancement, relu par /gang admin recharger).
+ * Réglages des gangs : config/Minenorth-portes/minenorth_gangs.toml (créé au premier lancement, relu par /gang recharger (OP)).
  * Les montants sont en CENTIMES. Valeurs hors limites : ramenées dans une plage raisonnable.
  */
 public final class GangConfig {
@@ -53,7 +53,7 @@ public final class GangConfig {
             Files.createDirectories(f.getParent());
             if (!Files.exists(f)) {
                 java.util.List<String> lines = new java.util.ArrayList<>();
-                lines.add("# Gangs MineNorth. Montants en centimes. Rechargement : /gang admin recharger");
+                lines.add("# Gangs MineNorth. Montants en centimes. Rechargement : /gang recharger");
                 lines.add("");
                 for (var e : DEFAULTS.entrySet()) {
                     lines.add("# " + e.getValue()[1]);

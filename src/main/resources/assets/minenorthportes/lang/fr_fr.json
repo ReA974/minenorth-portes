@@ -4,5 +4,8 @@
   "item.minenorthportes.serrure_avancee": "Serrure renforcée (Avancée)",
   "item.minenorthportes.serrure_expert": "Serrure renforcée (Experte)",
   "block.minenorthportes.coffre_gang": "Coffre de gang",
-  "block.minenorthportes.pancarte_territoire": "Pancarte de territoire"
+  "block.minenorthportes.pancarte_territoire": "Pancarte de territoire",
+  "item.minenorthportes.carnet_gang": "Carnet de gang",
+  "key.minenorthportes.gang": "Mon gang",
+  "key.categories.minenorthportes": "MineNorth - Portes et gangs"
 }

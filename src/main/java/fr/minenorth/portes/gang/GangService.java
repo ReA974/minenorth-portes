@@ -3,9 +3,7 @@ package fr.minenorth.portes.gang;
 import fr.minenorth.api.MineNorth;
 import fr.minenorth.api.PayResult;
 import fr.minenorth.portes.network.ModNetwork;
-import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -79,7 +77,7 @@ public final class GangService {
         MinecraftServer s = p.server;
         GangData data = GangData.get(s);
         if (!allow(p.getUUID(), "creer", 3000)) return "Doucement, réessayez dans quelques secondes.";
-        if (data.gangOf(p.getUUID()) != null) return "Vous êtes déjà dans un gang. Quittez-le d'abord (/gang quitter).";
+        if (data.gangOf(p.getUUID()) != null) return "Vous êtes déjà dans un gang. Quittez-le d'abord (Paramètres > Quitter le gang).";
         long wait = data.leftAt(p.getUUID()) + GangConfig.leaveDelayMs() - System.currentTimeMillis();
         if (wait > 0) return "Vous venez de quitter un gang : patientez encore " + (wait / 60000 + 1) + " min.";
         String name = GangRules.cleanName(nameRaw);
@@ -100,7 +98,7 @@ public final class GangService {
         g.members.put(p.getUUID(), GangRank.CHEF);
         data.add(g);
         attach(data, g);
-        tell(p, "§aVotre gang est fondé : " + g.label() + "§a. Invitez vos amis avec /gang inviter <joueur>.");
+        tell(p, "§aVotre gang est fondé : " + g.label() + "§a. Appuyez sur G pour gérer le gang et inviter vos amis.");
         membershipChanged(s, g);
         return null;
     }
@@ -124,12 +122,8 @@ public final class GangService {
         if (mine.size() >= 5 && !mine.containsKey(g.id)) return "Ce joueur a déjà trop d'invitations en attente.";
         mine.put(g.id, new Invite(g.id, inviter.getUUID(), now + GangConfig.inviteMs()));
         tell(inviter, "§aInvitation envoyée à " + MineNorth.displayName(target) + ".");
-        Component accept = Component.literal(" §a§l[Accepter]").withStyle(st -> st
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/gang accepter " + g.tag))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Rejoindre " + g.name))));
-        Component refuse = Component.literal(" §c[Refuser]").withStyle(st -> st
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/gang refuser " + g.tag)));
-        target.sendSystemMessage(Component.literal("§e" + MineNorth.displayName(inviter) + " vous invite à rejoindre " + g.label() + "§e.").append(accept).append(refuse));
+        target.sendSystemMessage(Component.literal("§e" + MineNorth.displayName(inviter) + " vous invite à rejoindre " + g.label() + "§e. Appuyez sur G (ou ouvrez votre Carnet de gang) pour répondre."));
+        GangGui.send(target, true);
         return null;
     }
 
@@ -143,7 +137,7 @@ public final class GangService {
         if (mine == null || mine.isEmpty()) return "Vous n'avez aucune invitation en cours.";
         Invite inv = null;
         if (gangQuery == null || gangQuery.isBlank()) {
-            if (mine.size() > 1) return "Plusieurs invitations : précisez le gang (/gang accepter <tag>).";
+            if (mine.size() > 1) return "Plusieurs invitations : acceptez-en une dans la liste.";
             inv = mine.values().iterator().next();
         } else {
             Gang q = data.byName(gangQuery);
@@ -182,7 +176,7 @@ public final class GangService {
         Gang g = data.gangOf(p.getUUID());
         if (g == null) return "Vous n'êtes dans aucun gang.";
         if (g.rankOf(p.getUUID()) == GangRank.CHEF) {
-            if (g.members.size() > 1) return "Vous êtes le chef : donnez d'abord le commandement (/gang grade <membre> chef) ou dissolvez le gang.";
+            if (g.members.size() > 1) return "Vous êtes le chef : donnez d'abord le commandement (onglet Membres) ou dissolvez le gang.";
             return dissolve(p, true);
         }
         data.leave(g, p.getUUID(), true);
@@ -193,15 +187,19 @@ public final class GangService {
     }
 
     public static String kick(ServerPlayer actor, String query) {
+        Gang g = GangData.get(actor.server).gangOf(actor.getUUID());
+        return kickUuid(actor, g == null ? null : memberByName(actor.server, g, query));
+    }
+
+    public static String kickUuid(ServerPlayer actor, UUID target) {
         MinecraftServer s = actor.server;
         GangData data = GangData.get(s);
         Gang g = data.gangOf(actor.getUUID());
         if (g == null) return "Vous n'êtes dans aucun gang.";
         GangRank mine = g.rankOf(actor.getUUID());
         if (!mine.atLeast(GangRank.LIEUTENANT)) return "Seuls le chef et les lieutenants peuvent exclure.";
-        UUID target = memberByName(s, g, query);
-        if (target == null) return "Aucun membre de votre gang ne porte ce nom.";
-        if (target.equals(actor.getUUID())) return "Pour partir, utilisez /gang quitter.";
+        if (target == null || !g.isMember(target)) return "Ce joueur n'est pas membre de votre gang.";
+        if (target.equals(actor.getUUID())) return "Pour partir, utilisez « Quitter le gang ».";
         GangRank theirs = g.rankOf(target);
         if (theirs.level() <= mine.level()) return "Vous ne pouvez exclure que quelqu'un de grade inférieur au vôtre.";
         String name = nameOf(s, target);
@@ -210,18 +208,22 @@ public final class GangService {
         if (tp != null) tell(tp, "§cVous avez été exclu de " + g.label() + "§c.");
         notifyGang(s, g, "§e" + name + " a été exclu par " + MineNorth.displayName(actor) + ".");
         membershipChanged(s, g);
-        if (tp != null && tp.containerMenu instanceof GangVaultMenu) tp.closeContainer();
+        if (tp != null) { if (tp.containerMenu instanceof GangVaultMenu) tp.closeContainer(); GangGui.send(tp, false); }
         return null;
     }
 
     public static String setRank(ServerPlayer actor, String query, GangRank rank) {
+        Gang g = GangData.get(actor.server).gangOf(actor.getUUID());
+        return setRankUuid(actor, g == null ? null : memberByName(actor.server, g, query), rank);
+    }
+
+    public static String setRankUuid(ServerPlayer actor, UUID target, GangRank rank) {
         MinecraftServer s = actor.server;
         GangData data = GangData.get(s);
         Gang g = data.gangOf(actor.getUUID());
         if (g == null) return "Vous n'êtes dans aucun gang.";
         if (g.rankOf(actor.getUUID()) != GangRank.CHEF) return "Seul le chef peut changer les grades.";
-        UUID target = memberByName(s, g, query);
-        if (target == null) return "Aucun membre de votre gang ne porte ce nom.";
+        if (target == null || !g.isMember(target)) return "Ce joueur n'est pas membre de votre gang.";
         if (target.equals(actor.getUUID())) return "Vous êtes déjà le chef.";
         String name = nameOf(s, target);
         if (rank == GangRank.CHEF) {
@@ -237,6 +239,44 @@ public final class GangService {
         return null;
     }
 
+    /** Le chef change le nom, le tag et la couleur du gang. */
+    public static String settings(ServerPlayer actor, String nameRaw, String tagRaw, int color) {
+        MinecraftServer s = actor.server;
+        GangData data = GangData.get(s);
+        Gang g = data.gangOf(actor.getUUID());
+        if (g == null) return "Vous n'êtes dans aucun gang.";
+        if (g.rankOf(actor.getUUID()) != GangRank.CHEF) return "Seul le chef peut modifier les paramètres.";
+        if (!allow(actor.getUUID(), "parametres", 3000)) return "Doucement, réessayez dans quelques secondes.";
+        String name = GangRules.cleanName(nameRaw);
+        if (name == null) return "Nom invalide : " + GangRules.NAME_MIN + " à " + GangRules.NAME_MAX + " caractères (lettres, chiffres, espace, tiret).";
+        String tag = GangRules.cleanTag(tagRaw);
+        if (tag == null) return "Tag invalide : " + GangRules.TAG_MIN + " à " + GangRules.TAG_MAX + " lettres ou chiffres.";
+        for (Gang o : data.gangs()) {
+            if (o != g && (o.name.equalsIgnoreCase(name) || o.tag.equalsIgnoreCase(tag))) return "Ce nom ou ce tag est déjà pris par un autre gang.";
+        }
+        boolean renamed = !g.name.equals(name);
+        g.name = name; g.tag = tag; g.color = color & 0xFFFFFF;
+        data.setDirty();
+        if (renamed) GangDoors.refreshNames(s, g);
+        TerritoryManager.requestMapRefresh();
+        return null;
+    }
+
+    /** Invitations en attente pour ce joueur (pour l'écran). */
+    public static List<GangView.Invite> invitesOf(ServerPlayer p) {
+        GangData data = GangData.get(p.server);
+        List<GangView.Invite> out = new ArrayList<>();
+        Map<UUID, Invite> mine = INVITES.get(p.getUUID());
+        if (mine == null) return out;
+        long now = System.currentTimeMillis();
+        mine.values().removeIf(i -> i.expiryMs < now || data.gang(i.gang) == null);
+        for (Invite i : mine.values()) {
+            Gang g = data.gang(i.gang);
+            if (g != null) out.add(new GangView.Invite(g.tag, g.name, g.color, nameOf(p.server, i.inviter)));
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------ dissolution
 
     public static String dissolve(ServerPlayer actor, boolean confirmed) {
@@ -246,7 +286,7 @@ public final class GangService {
         if (g == null) return "Vous n'êtes dans aucun gang.";
         if (g.rankOf(actor.getUUID()) != GangRank.CHEF) return "Seul le chef peut dissoudre le gang.";
         if (!g.vaultEmpty()) return "Videz d'abord le coffre commun : un gang dissous ne peut pas garder d'objets.";
-        if (!confirmed) return "Cette action est définitive. Confirmez avec /gang dissoudre confirmer.";
+        if (!confirmed) return "Cette action est définitive. Confirmez dans l'écran.";
         disband(s, g, "Le gang a été dissous par son chef.");
         return null;
     }

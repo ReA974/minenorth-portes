@@ -247,22 +247,16 @@ public final class TerritoryManager {
         return null;
     }
 
-    public static List<String> listLines(MinecraftServer s) {
-        GangData data = GangData.get(s);
-        List<String> out = new ArrayList<>();
-        long now = System.currentTimeMillis();
-        for (Territory t : data.territories()) {
-            Gang h = data.gang(t.holder);
-            State st = STATES.get(t.name.toLowerCase(Locale.ROOT));
-            String line = "§e" + t.name + " §7- " + (h == null ? "§alibre" : h.label());
-            if (now < t.protectedUntil) line += " §8(protégée " + ((t.protectedUntil - now) / 60000 + 1) + " min)";
-            if (st != null && st.attacker != null && st.progress > 0) {
-                Gang a = data.gang(st.attacker);
-                if (a != null) line += " §c⚔ " + a.tag() + " " + (st.progress * 100 / Math.max(1, GangConfig.captureSeconds())) + "%";
-            }
-            out.add(line);
+    /** Etat court d'un territoire : « libre », protégée, ou capture en cours. */
+    public static String status(GangData data, Territory t, long now) {
+        State st = STATES.get(t.name.toLowerCase(Locale.ROOT));
+        String s = "";
+        if (now < t.protectedUntil) s = "protégée " + ((t.protectedUntil - now) / 60000 + 1) + " min";
+        if (st != null && st.attacker != null && st.progress > 0) {
+            Gang a = data.gang(st.attacker);
+            if (a != null) s = (s.isEmpty() ? "" : s + " - ") + "capture " + a.tag() + " " + (st.progress * 100 / Math.max(1, GangConfig.captureSeconds())) + "%";
         }
-        return out;
+        return s;
     }
 
     /** Clic droit sur une pancarte de territoire. */

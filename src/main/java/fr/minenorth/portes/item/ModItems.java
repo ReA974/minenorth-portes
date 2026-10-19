@@ -26,6 +26,7 @@ public final class ModItems {
                 out.accept(LOCK_NORMAL.get());
                 out.accept(LOCK_ADVANCED.get());
                 out.accept(LOCK_EXPERT.get());
+                out.accept(fr.minenorth.portes.gang.GangBlocks.GANG_BOOK.get());
                 out.accept(fr.minenorth.portes.gang.GangBlocks.GANG_CHEST_ITEM.get());
                 out.accept(fr.minenorth.portes.gang.GangBlocks.TERRITORY_SIGN_ITEM.get());
             };

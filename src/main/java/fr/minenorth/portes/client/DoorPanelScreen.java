@@ -87,6 +87,10 @@ public class DoorPanelScreen extends Screen {
         }
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
         // En haut, à côté de « Fermer » : en bas du panneau (460 px) le bouton sortait de l'écran avec une échelle d'interface (GUI) de 3.
+        if (data.mode() == 1 && "PERSONAL".equals(data.type())) btn(x + w - 100 - 140 - 8, y + 10, 140, 16, "PORTE DE GANG", MineNorthStyle.PINK, () -> {
+            fr.minenorth.portes.network.ModNetwork.CHANNEL.sendToServer(new fr.minenorth.portes.network.GangActionPacket(fr.minenorth.portes.gang.GangGui.DOOR_CONTEXT, "", "", data.pos()));
+            onClose();
+        });
         if (data.adminPreview()) btn(x + w - 100 - 96 - 8, y + 10, 96, 16, "ADMIN", MineNorthStyle.PINK, () -> send(20, "", false, ""));
         if (data.mode() == 4 && data.houseName() != null && !data.houseName().isBlank()) btn(x + w - 100 - 130 - 8, y + 10, 130, 16, "FICHE AGENCE", MineNorthStyle.CYAN, () -> net.minecraft.client.Minecraft.getInstance().setScreen(new PropertyConfigScreen(data)));
     }
