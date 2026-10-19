@@ -1,0 +1,34 @@
+{
+ "variants": {
+  "facing=north,open=false": {
+   "model": "minenorthportes:block/caisse_enregistreuse"
+  },
+  "facing=north,open=true": {
+   "model": "minenorthportes:block/caisse_enregistreuse_ouverte"
+  },
+  "facing=east,open=false": {
+   "model": "minenorthportes:block/caisse_enregistreuse",
+   "y": 90
+  },
+  "facing=east,open=true": {
+   "model": "minenorthportes:block/caisse_enregistreuse_ouverte",
+   "y": 90
+  },
+  "facing=south,open=false": {
+   "model": "minenorthportes:block/caisse_enregistreuse",
+   "y": 180
+  },
+  "facing=south,open=true": {
+   "model": "minenorthportes:block/caisse_enregistreuse_ouverte",
+   "y": 180
+  },
+  "facing=west,open=false": {
+   "model": "minenorthportes:block/caisse_enregistreuse",
+   "y": 270
+  },
+  "facing=west,open=true": {
+   "model": "minenorthportes:block/caisse_enregistreuse_ouverte",
+   "y": 270
+  }
+ }
+}

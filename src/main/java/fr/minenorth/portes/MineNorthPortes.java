@@ -14,5 +14,6 @@ public class MineNorthPortes {
         SystemeConfigFiles.init();
         ModNetwork.register();
         ModItems.register(FMLJavaModLoadingContext.get().getModEventBus());
+        fr.minenorth.portes.braquage.Braquages.init(FMLJavaModLoadingContext.get().getModEventBus());
     }
 }
