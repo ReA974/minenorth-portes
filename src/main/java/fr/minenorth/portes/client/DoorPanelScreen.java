@@ -82,6 +82,7 @@ public class DoorPanelScreen extends Screen {
             case 2 -> buildRequest(x, y, w);
             case 3 -> buildListing(x, y, w);
             case 5 -> { }
+            case 6 -> buildRenter(x, y, w);
             default -> { if (splitLayout()) buildSplit(x, y, w); else buildAdmin(x, y, w); }
         }
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
@@ -165,14 +166,14 @@ public class DoorPanelScreen extends Screen {
         int ix = x + 30, iw = w - 60, half = (iw - 10) / 2;
 
         // ---------- A) VENTE / LOCATION ----------
-        drawLabelLater("VENTE / LOCATION DE LA MAISON", ix, y + 72, MineNorthStyle.WHITE);
+        drawLabelLater("VENTE / LOCATION DU BIEN", ix, y + 72, MineNorthStyle.WHITE);
         if (listed) {
             String info = ("RENTAL".equals(data.listingMode()) ? "EN LOCATION • " : "EN VENTE • ") + MineNorthStyle.euros(data.listingPrice())
                     + ("RENTAL".equals(data.listingMode()) ? " / " + data.listingDays() + " j" : "");
             drawLabelLater(info, ix + iw - font.width(info), y + 72, MineNorthStyle.OK);
         }
-        drawLabelLater("NOM DE LA MAISON", ix, y + 88, MineNorthStyle.BLUE);
-        fHouse = box(ix, y + 99, iw, "Nom de la maison", sHouse);
+        drawLabelLater("NOM DU BIEN", ix, y + 88, MineNorthStyle.BLUE);
+        fHouse = box(ix, y + 99, iw, "Nom du bien", sHouse);
         btn(ix, y + 125, half, 20, "VENTE", !rental ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> switchTo(() -> rental = false));
         btn(ix + half + 10, y + 125, half, 20, "LOCATION", rental ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> switchTo(() -> rental = true));
         drawLabelLater(rental ? "PRIX DE LA LOCATION (€)" : "PRIX DE VENTE (€)", ix, y + 152, MineNorthStyle.BLUE);
@@ -204,8 +205,8 @@ public class DoorPanelScreen extends Screen {
             drawLabelLater("JOUEUR À ATTRIBUER", ix, by + 50, MineNorthStyle.BLUE);
             fPlayer = box(ix, by + 61, iw, "Nom Minecraft du joueur", aName);
             if (!existing) {
-                drawLabelLater("NOM DE LA MAISON (OPTIONNEL)", ix, by + 88, MineNorthStyle.BLUE);
-                fPlayerHouse = box(ix, by + 99, iw, "Nom de la maison", aHouse);
+                drawLabelLater("NOM DU BIEN (OPTIONNEL)", ix, by + 88, MineNorthStyle.BLUE);
+                fPlayerHouse = box(ix, by + 99, iw, "Nom du bien", aHouse);
                 buttonY = by + 126;
             } else buttonY = by + 88;
         } else if (companyMode()) {
@@ -233,7 +234,7 @@ public class DoorPanelScreen extends Screen {
 
     private void submitListing() {
         String h = fHouse.getValue().trim(), p = fPrice.getValue().trim(), d = fDays == null ? "0" : fDays.getValue().trim();
-        if (h.isEmpty()) { error = "Indiquez le nom de la maison."; return; }
+        if (h.isEmpty()) { error = "Indiquez le nom du bien."; return; }
         if (!positiveNumber(p, false)) { error = "Indiquez un prix valide."; return; }
         if (rental && !positiveNumber(d, true)) { error = "Indiquez une durée de location en jours."; return; }
         if (data.mode() == 4) {
@@ -266,6 +267,30 @@ public class DoorPanelScreen extends Screen {
         labels.add(new Label(text, x, y, color));
     }
 
+    /** Nom de la catégorie du bien (Maison, Garage, Local d'entreprise…) : affiché à la place d'un « maison » écrit en dur. */
+    private String categoryLabel() {
+        return fr.minenorth.portes.agency.PropertyCategory.from(data.category()).label();
+    }
+
+    /** Panneau du locataire (clic accroupi pendant sa location) : il autorise ou retire des joueurs. */
+    private void buildRenter(int x, int y, int w) {
+        labels.clear();
+        long ms = Math.max(0, data.expiryMs() - System.currentTimeMillis());
+        drawLabelLater("Location en cours : il reste " + (ms / 86_400_000L) + " j " + (ms / 3_600_000L % 24) + " h", x + 20, y + 56, MineNorthStyle.OK);
+        drawLabelLater("AUTORISATIONS", x + 20, y + 78, MineNorthStyle.BLUE);
+        name = box(x + 20, y + 94, w - 40, "Joueur à autoriser", "");
+        int half = (w - 50) / 2;
+        btn(x + 20, y + 120, half, 22, "AJOUTER L'ACCÈS", MineNorthStyle.CYAN, () -> send(1, name.getValue(), false, ""));
+        btn(x + 30 + half, y + 120, half, 22, "RETIRER L'ACCÈS", MineNorthStyle.DARK, () -> send(2, name.getValue(), false, ""));
+        drawLabelLater("PERSONNES AUTORISÉES", x + 20, y + 158, MineNorthStyle.BLUE);
+        int i = 0;
+        for (String t : data.trusted()) {
+            drawLabelLater("• " + t, x + 20 + (i % 2) * 260, y + 176 + (i / 2) * 14, MineNorthStyle.TEXT);
+            if (++i >= 24) break;
+        }
+        if (data.trusted().isEmpty()) drawLabelLater("Personne pour l'instant.", x + 20, y + 176, MineNorthStyle.MUTED);
+    }
+
     private void buildOwner(int x, int y, int w) {
         labels.clear();
         String type = data.type().toLowerCase(Locale.ROOT);
@@ -280,9 +305,9 @@ public class DoorPanelScreen extends Screen {
             btn(x + 20, y + 112, half, 22, "AJOUTER L'ACCÈS", MineNorthStyle.CYAN, () -> send(1, name.getValue(), false, ""));
             btn(x + 30 + half, y + 112, half, 22, "RETIRER L'ACCÈS", MineNorthStyle.DARK, () -> send(2, name.getValue(), false, ""));
 
-            drawLabelLater("MAISON", x + 20, y + 146, MineNorthStyle.BLUE);
-            house = box(x + 20, y + 162, w - 40, "Nom de la maison", data.houseName());
-            btn(x + 20, y + 188, w - 40, 22, "ENREGISTRER LE NOM DE LA MAISON", MineNorthStyle.DARK,
+            drawLabelLater(categoryLabel().toUpperCase(Locale.ROOT), x + 20, y + 146, MineNorthStyle.BLUE);
+            house = box(x + 20, y + 162, w - 40, "Nom du bien", data.houseName());
+            btn(x + 20, y + 188, w - 40, 22, "ENREGISTRER LE NOM DU BIEN", MineNorthStyle.DARK,
                     () -> send(15, house.getValue(), false, ""));
             btn(x + 20, y + 216, w - 40, 22, "LIBÉRER LA PORTE", MineNorthStyle.PINK, () -> send(3, "", false, ""));
 
@@ -352,8 +377,8 @@ public class DoorPanelScreen extends Screen {
         btn(x + 356, y + 112, bw, 22, "ORGA", selectedType == 4 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 4; rebuildWidgets(); });
         btn(x + 440, y + 112, bw, 22, "MAIRIE", selectedType == 5 ? MineNorthStyle.CYAN : MineNorthStyle.DARK, () -> { selectedType = 5; rebuildWidgets(); });
 
-        drawLabelLater("NOM DE LA MAISON", x + 20, y + 146, MineNorthStyle.BLUE);
-        house = box(x + 20, y + 162, w - 40, "Nom de la maison", data.houseName());
+        drawLabelLater("NOM DU BIEN", x + 20, y + 146, MineNorthStyle.BLUE);
+        house = box(x + 20, y + 162, w - 40, "Nom du bien", data.houseName());
         int next = 190;
         permission = null;
         if (companyMode()) {
@@ -369,7 +394,7 @@ public class DoorPanelScreen extends Screen {
         String type = selectedType == 1 ? "POLICE" : selectedType == 2 ? "POMPIER" : selectedType == 3 ? "ENTREPRISE" : selectedType == 4 ? "ORGANISATION" : selectedType == 5 ? "MAIRIE" : "PERSONAL";
         btn(x + 20, y + next, w - 40, 24, "ENREGISTRER LES RÉGLAGES", MineNorthStyle.CYAN,
                 () -> send(12, name.getValue(), false, type + "|" + (companyMode() ? companyPerm() : permission == null ? "" : permission.getValue())));
-        btn(x + 20, y + next + 30, w - 40, 22, "ENREGISTRER LE NOM DE LA MAISON", MineNorthStyle.DARK,
+        btn(x + 20, y + next + 30, w - 40, 22, "ENREGISTRER LE NOM DU BIEN", MineNorthStyle.DARK,
                 () -> send(15, house.getValue(), false, ""));
 
         // A house with no owner can be put on the market. An already attributed
@@ -381,7 +406,7 @@ public class DoorPanelScreen extends Screen {
                     btn(x + 20, y + next + 60, (w - 50) / 2, 22, label, MineNorthStyle.GREEN, () -> { listingSetupMode = "RENTAL".equals(data.listingMode()) ? 1 : 0; rebuildWidgets(); });
                     btn(x + 30 + (w - 50) / 2, y + next + 60, (w - 50) / 2, 22, "RETIRER L'ANNONCE", MineNorthStyle.PINK, () -> send(14, "", false, ""));
                 } else {
-                    btn(x + 20, y + next + 60, w - 40, 24, "METTRE LA MAISON EN VENTE", MineNorthStyle.GREEN, () -> { listingSetupMode = 0; rebuildWidgets(); });
+                    btn(x + 20, y + next + 60, w - 40, 24, "METTRE LE BIEN EN VENTE", MineNorthStyle.GREEN, () -> { listingSetupMode = 0; rebuildWidgets(); });
                 }
             } else {
                 buildListingSetup(x, y, w, next + 60);
@@ -408,7 +433,7 @@ public class DoorPanelScreen extends Screen {
         btn(x + 30 + half, y + startY, half, 22, "TEMPORAIRE", listingSetupMode == 1 ? MineNorthStyle.CYAN : MineNorthStyle.DARK,
                 () -> { listingSetupMode = 1; rebuildWidgets(); });
 
-        drawLabelLater("PRIX DE LA MAISON (€)", x + 20, y + startY + 32, MineNorthStyle.BLUE);
+        drawLabelLater("PRIX DU BIEN (€)", x + 20, y + startY + 32, MineNorthStyle.BLUE);
         price = box(x + 20, y + startY + 47, w - 40, "Prix en euros", data.listingPrice() > 0 ? String.valueOf(data.listingPrice() / 100.0) : "");
 
         int buttonY;
@@ -447,6 +472,7 @@ public class DoorPanelScreen extends Screen {
             case 2 -> "PORTE PROTÉGÉE";
             case 3 -> "PORTE À VENDRE / À LOUER";
             case 5 -> "INFORMATIONS DE LA PORTE";
+            case 6 -> "MA LOCATION";
             default -> "ADMINISTRATION DE LA PORTE";
         };
         String sub = data.mode() == 3
@@ -473,6 +499,8 @@ public class DoorPanelScreen extends Screen {
             if ("PERSONAL".equals(data.type())) {
                 centeredNoShadow(g, "Serrure : " + levels[Math.max(0, Math.min(3, data.security()))], width / 2, y + 118, MineNorthStyle.MUTED);
             }
+        } else if (data.mode() == 6) {
+            // Rien de plus : les libellés du panneau locataire sont posés par buildRenter.
         } else if (data.mode() == 4) {
             g.drawString(font, headerHint, x + 20, y + 48, MineNorthStyle.MUTED, false);
             g.drawString(font, "Type actuel : " + data.type(), x + 20, y + PANEL_H - 55, MineNorthStyle.BLUE, false);
@@ -484,7 +512,7 @@ public class DoorPanelScreen extends Screen {
             centeredNoShadow(g, rental ? "Location temporaire" : "Vente définitive", width / 2, y + 78, MineNorthStyle.BLUE);
             centeredNoShadow(g, MineNorthStyle.euros(data.listingPrice()) + (rental ? " / " + data.listingDays() + " jours" : ""), width / 2, y + 106, MineNorthStyle.TEXT);
             centeredNoShadow(g, "Paiement sécurisé par compte bancaire MineNorth.", width / 2, y + 132, MineNorthStyle.MUTED);
-            if (!data.houseName().isBlank()) centeredNoShadow(g, "Maison : " + data.houseName(), width / 2, y + 156, MineNorthStyle.TEXT);
+            if (!data.houseName().isBlank()) centeredNoShadow(g, categoryLabel() + " : " + data.houseName(), width / 2, y + 156, MineNorthStyle.TEXT);
             if (rental && data.renter() != null && !data.renter().isBlank()) centeredNoShadow(g, "Cette location est déjà active.", width / 2, y + 180, MineNorthStyle.ALERT);
         }
 

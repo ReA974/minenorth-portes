@@ -8,6 +8,9 @@ public final class ImmoRules {
     public static final int MAX_HOUSES = 2;
     public static final int MAX_APARTMENTS = 2;
     public static final int MAX_BUSINESSES = 2;
+    public static final int MAX_LOCALS = 2;
+    /** Petit commerce, stockage, garage, autres : 2 biens par catégorie (choix par défaut, à ajuster ici). */
+    public static final int MAX_OTHERS = 2;
     private static final long DAY_MS = 86_400_000L;
 
     /** Remboursement à la revente : 65 % du prix d'achat, arrondi au centime inférieur. */
@@ -18,6 +21,8 @@ public final class ImmoRules {
             case HOUSE -> MAX_HOUSES;
             case APARTMENT -> MAX_APARTMENTS;
             case BUSINESS -> MAX_BUSINESSES;
+            case LOCAL -> MAX_LOCALS;
+            case SMALL_SHOP, STORAGE, GARAGE, OTHER -> MAX_OTHERS;
         };
     }
 
