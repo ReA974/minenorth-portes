@@ -98,7 +98,7 @@ public final class GangService {
         g.members.put(p.getUUID(), GangRank.CHEF);
         data.add(g);
         attach(data, g);
-        tell(p, "§aVotre gang est fondé : " + g.label() + "§a. Appuyez sur G pour gérer le gang et inviter vos amis.");
+        tell(p, "§aVotre gang est fondé : " + g.label() + "§a. Ouvrez l'application Mon gang de votre téléphone pour gérer le gang et inviter vos amis.");
         membershipChanged(s, g);
         return null;
     }
@@ -122,7 +122,7 @@ public final class GangService {
         if (mine.size() >= 5 && !mine.containsKey(g.id)) return "Ce joueur a déjà trop d'invitations en attente.";
         mine.put(g.id, new Invite(g.id, inviter.getUUID(), now + GangConfig.inviteMs()));
         tell(inviter, "§aInvitation envoyée à " + MineNorth.displayName(target) + ".");
-        target.sendSystemMessage(Component.literal("§e" + MineNorth.displayName(inviter) + " vous invite à rejoindre " + g.label() + "§e. Appuyez sur G (ou ouvrez votre Carnet de gang) pour répondre."));
+        target.sendSystemMessage(Component.literal("§e" + MineNorth.displayName(inviter) + " vous invite à rejoindre " + g.label() + "§e. Ouvrez l'application Mon gang de votre téléphone (ou votre Carnet de gang) pour répondre."));
         GangGui.send(target, true);
         return null;
     }

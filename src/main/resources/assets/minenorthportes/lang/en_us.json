@@ -5,7 +5,5 @@
   "item.minenorthportes.serrure_expert": "Serrure renforcée (Experte)",
   "block.minenorthportes.coffre_gang": "Gang Chest",
   "block.minenorthportes.pancarte_territoire": "Territory Sign",
-  "item.minenorthportes.carnet_gang": "Gang Notebook",
-  "key.minenorthportes.gang": "My gang",
-  "key.categories.minenorthportes": "MineNorth - Doors and gangs"
+  "item.minenorthportes.carnet_gang": "Gang Notebook"
 }

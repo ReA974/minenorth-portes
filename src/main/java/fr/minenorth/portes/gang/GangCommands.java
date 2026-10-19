@@ -7,7 +7,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 /**
- * Tout se fait dans l'écran « Mon gang » (touche G ou Carnet de gang). Il ne reste qu'une commande de secours pour les OP :
+ * Tout se fait dans l'écran « Mon gang » (application du téléphone ou Carnet de gang). Il ne reste qu'une commande de secours pour les OP :
  * relire minenorth_gangs.toml sans redémarrer le serveur.
  */
 @Mod.EventBusSubscriber

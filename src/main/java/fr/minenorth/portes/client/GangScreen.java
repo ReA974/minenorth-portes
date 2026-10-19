@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Écran « Mon gang » (touche G ou Carnet de gang). Tout se fait ici : membres, bases, territoires, paramètres, invitations,
+ * Écran « Mon gang » (application « Mon gang » du téléphone, ou Carnet de gang). Tout se fait ici : membres, bases, territoires, paramètres, invitations,
  * et la petite fenêtre « porte » (clic droit accroupi sur une porte). Le client ne décide de rien : chaque bouton envoie
  * une intention au serveur, qui revérifie les droits puis renvoie l'état à jour.
  */

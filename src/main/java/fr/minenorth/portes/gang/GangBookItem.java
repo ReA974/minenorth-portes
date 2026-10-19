@@ -8,7 +8,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
-/** « Carnet de gang » : clic droit = ouvre l'écran « Mon gang » (comme la touche G). Ne contient rien, ne se perd pas. */
+/** « Carnet de gang » : clic droit = ouvre l'écran « Mon gang » (comme l'application du téléphone). Ne contient rien, ne se perd pas. */
 public class GangBookItem extends Item {
     public GangBookItem() { super(new Item.Properties().stacksTo(1)); }
 
