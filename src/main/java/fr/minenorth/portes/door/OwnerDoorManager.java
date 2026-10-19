@@ -79,6 +79,11 @@ public final class OwnerDoorManager {
                 sendGroupOwnerPanel(p, l, pos, entry);
                 return;
             }
+            // Locataire : il gère les personnes autorisées chez lui (au lieu de l'annonce « location déjà active »).
+            if (canManageTrust(p, l, pos, entry) && !(entry.owner() != null && entry.owner().equals(p.getUUID()))) {
+                sendRenterPanel(p, l, pos, entry);
+                return;
+            }
             OwnerDoorData.DoorListing listing = d.listing(l, pos);
             if (listing != null && listing.active() && (entry.owner() == null || !entry.owner().equals(p.getUUID()))) {
                 sendListingPanel(p, l, pos, entry);
@@ -259,6 +264,8 @@ public final class OwnerDoorManager {
             // Le locataire doit pouvoir ouvrir même si la maison n'a aucun propriétaire (maison gérée par les OP).
             case PERSONAL -> data.isRenter(level, pos, player.getUUID())
                     || (entry.owner() != null && data.isTrusted(entry.owner(), player.getUUID()))
+                    // Le locataire peut autoriser des gens pendant sa location : ils ouvrent la porte comme lui.
+                    || data.isTrusted(data.activeRenter(level, pos), player.getUUID())
                     // Perquisition acceptée par le Commissaire : la police ouvre les portes du citoyen.
                     || PoliceCompat.canSearch(player, entry.owner())
                     // Crochetage réussi : accès temporaire, sans droit durable.
@@ -310,6 +317,27 @@ public final class OwnerDoorManager {
         sendPanel(p, l, pos, 1, ownerLabel(p, e), trusted, req, e.type(), e.permission(), e.temporary());
     }
 
+    /** Vrai si le joueur gère les autorisations de cette porte : son propriétaire, ou son locataire pendant la location. */
+    private static boolean canManageTrust(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
+        if (e == null || e.type() != OwnerDoorData.DoorType.PERSONAL) return false;
+        return (e.owner() != null && e.owner().equals(p.getUUID())) || OwnerDoorData.get(l).isRenter(l, pos, p.getUUID());
+    }
+
+    /** Renvoie le panneau d'autorisations qui convient : celui du propriétaire, ou celui du locataire. */
+    private static void sendTrustPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
+        if (e.owner() != null && e.owner().equals(p.getUUID())) sendOwnerPanel(p, l, pos, e);
+        else sendRenterPanel(p, l, pos, e);
+    }
+
+    /** Panneau du locataire (clic accroupi pendant sa location) : il autorise ou retire des joueurs, rien d'autre. */
+    private static void sendRenterPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
+        CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
+        CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));
+        List<String> trusted = new ArrayList<>();
+        for (UUID u : OwnerDoorData.get(l).trusted(p.getUUID())) trusted.add(MineNorth.displayName(p.server, u));
+        sendPanel(p, l, pos, 6, ownerLabel(p, e), trusted, List.of(), e.type(), e.permission(), e.temporary());
+    }
+
     private static void sendGroupOwnerPanel(ServerPlayer p, ServerLevel l, BlockPos pos, OwnerDoorData.DoorEntry e) {
         CONTEXTS.put(p.getUUID(), new OwnerDoorData.DoorKey(l.dimension(), OwnerDoorData.normalize(l, pos)));
         CONTEXT_POS.put(p.getUUID(), OwnerDoorData.normalize(l, pos));
@@ -329,6 +357,11 @@ public final class OwnerDoorManager {
         previewing = true;
         try {
             OwnerDoorData d = OwnerDoorData.get(l);
+            // Locataire : il gère les personnes autorisées chez lui (au lieu de l'annonce « location déjà active »).
+            if (canManageTrust(p, l, pos, entry) && !(entry.owner() != null && entry.owner().equals(p.getUUID()))) {
+                sendRenterPanel(p, l, pos, entry);
+                return;
+            }
             OwnerDoorData.DoorListing listing = d.listing(l, pos);
             boolean ownerView = entry.owner() != null && entry.owner().equals(p.getUUID());
             if (entry.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(entry.permission())
@@ -587,8 +620,8 @@ public final class OwnerDoorManager {
                 OwnerDoorData.DoorEntry updated = data.get(level, pos);
                 if (updated != null) sendAdminPanel(player, level, pos, updated);
             }
-            case 1 -> { if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID())) return; addTrusted(player, text); sendOwnerPanel(player, level, pos, entry); }
-            case 2 -> { if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID())) return; removeTrusted(player, text); sendOwnerPanel(player, level, pos, entry); }
+            case 1 -> { if (!canManageTrust(player, level, pos, entry)) return; addTrusted(player, text); sendTrustPanel(player, level, pos, entry); }
+            case 2 -> { if (!canManageTrust(player, level, pos, entry)) return; removeTrusted(player, text); sendTrustPanel(player, level, pos, entry); }
             case 3 -> { if (entry == null || !(entry.owner() == null ? player.hasPermissions(2) : entry.owner().equals(player.getUUID()))) return; unassign(player, pos); }
             case 4 -> request(player, pos);
             case 5, 6 -> { if (entry == null || entry.owner() == null || !entry.owner().equals(player.getUUID())) return; UUID u; try { u = UUID.fromString(extra); } catch (Exception ex) { return; } respond(player, u, action == 5); sendOwnerPanel(player, level, pos, entry); }

@@ -346,6 +346,28 @@ public final class AgencyService {
         return AgencyResult.ok("Location prolongée de " + l.days() + " jour(s) pour " + euros(l.price()) + ".");
     }
 
+    /** Arrêt d'une location à la demande du locataire (ou du patron pour une entreprise) : aucun remboursement. */
+    public static AgencyResult stopRental(ServerPlayer p, String dimension, String houseName) {
+        MinecraftServer s = p.server;
+        OwnerDoorData d = OwnerDoorData.get(s.overworld());
+        House h = find(d, dimension, houseName);
+        if (h == null) return AgencyResult.fail("Bien introuvable.");
+        DoorListing l = listing(d, h);
+        if (l == null || l.mode() != ListingMode.RENTAL || !l.rentalActive()) return AgencyResult.fail("Aucune location en cours sur ce bien.");
+        UUID wgMember;
+        if (l.renterCompany() > 0) {
+            if (!EntrepriseCompat.isOwner(p, l.renterCompany())) return AgencyResult.fail("Seul le patron de l'entreprise peut arrêter cette location.");
+            wgMember = EntrepriseCompat.ownerUuid(s, l.renterCompany());
+        } else {
+            if (!p.getUUID().equals(l.renter())) return AgencyResult.fail("Ce bien n'est pas loué à votre nom.");
+            wgMember = p.getUUID();
+        }
+        d.endRental(h.first());
+        if (wgMember != null) WorldGuardBridge.release(s, h.dimension(), h.name(), wgMember, MineNorth.pseudo(s, wgMember));
+        persist(s, d);
+        return AgencyResult.ok("Location arrêtée (aucun remboursement) : « " + h.name() + " » est de nouveau disponible.");
+    }
+
     public static AgencyResult resell(ServerPlayer p, String dimension, String houseName) {
         MinecraftServer s = p.server;
         OwnerDoorData d = OwnerDoorData.get(s.overworld());

@@ -288,6 +288,34 @@ public class OwnerDoorData extends SavedData {
         return h.length() > 48 ? h.substring(0, 48).trim() : h;
     }
 
+    /** Locataire actuel de la maison de cette porte (location en cours), ou null. */
+    public UUID activeRenter(ServerLevel level, BlockPos pos) {
+        DoorKey key = new DoorKey(level.dimension(), normalize(level, pos));
+        DoorListing direct = listing(level, pos);
+        if (direct != null && direct.rentalActive()) return direct.renter();
+        DoorEntry entry = doors.get(key);
+        if (entry == null || entry.houseName().isBlank()) return null;
+        for (var en : listings.entrySet()) {
+            if (!en.getKey().dimension().equals(key.dimension())) continue;
+            DoorListing l = en.getValue();
+            if (entry.houseName().equalsIgnoreCase(l.houseName()) && l.rentalActive()) return l.renter();
+        }
+        return null;
+    }
+
+    /** Fin anticipée d'une location (sans remboursement) : le bien redevient disponible dans le catalogue. */
+    public void endRental(DoorKey key) {
+        DoorListing l = null;
+        for (DoorKey k : houseDoors(key)) {
+            DoorListing c = listings.get(k);
+            if (c != null && c.mode() == ListingMode.RENTAL && c.renter() != null) { l = c; break; }
+        }
+        if (l == null) return;
+        if (l.renterCompany() > 0) releaseCompanyHouse(key);
+        relistHouseForRental(key, l.price(), l.days());
+        setDirty();
+    }
+
     public void setHouseName(ServerLevel level, BlockPos pos, String houseName) {
         DoorKey key = new DoorKey(level.dimension(), normalize(level, pos));
         DoorEntry e = doors.get(key);
