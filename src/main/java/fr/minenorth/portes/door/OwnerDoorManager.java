@@ -646,9 +646,14 @@ public final class OwnerDoorManager {
             // Fiche d'agence du bien (OP) : text = "CATEGORIE|meuble 0/1", extra = description.
             case 22 -> {
                 if (!player.hasPermissions(2) || entry == null || entry.houseName().isBlank()) return;
-                String[] parts = text.split("\\|", 2);
+                // text = "CATEGORIE|meuble 0/1|catalogue|entreprise bénéficiaire (id, 0 = aucune)", extra = description.
+                String[] parts = text.split("\\|", 4);
+                int payee = 0;
+                try { if (parts.length > 3) payee = Integer.parseInt(parts[3].trim()); } catch (NumberFormatException ignored) {}
+                if (payee > 0 && !Boolean.TRUE.equals(EntrepriseCompat.isActive(player.server, payee))) payee = 0;
                 fr.minenorth.portes.agency.PropertyInfoData.get(level).set(key.dimension().location().toString(), entry.houseName(),
-                        fr.minenorth.portes.agency.PropertyCategory.from(parts[0]), parts.length > 1 && parts[1].equals("1"), extra);
+                        fr.minenorth.portes.agency.PropertyCategory.from(parts[0]), parts.length > 1 && parts[1].equals("1"), extra,
+                        parts.length > 2 ? parts[2] : "", payee);
                 player.displayClientMessage(Component.literal("§aFiche d'agence enregistrée."), true);
                 sendAdminPanel(player, level, pos, entry);
             }

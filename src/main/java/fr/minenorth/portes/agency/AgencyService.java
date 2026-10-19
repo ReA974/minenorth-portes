@@ -42,7 +42,7 @@ public final class AgencyService {
 
     /** Fiche d'un bien pour l'agence. x, y, z : première porte de la maison. */
     public record PropertyView(String dimension, String houseName, PropertyCategory category, ListingMode mode, long priceCents,
-                               int days, boolean furnished, String description, int imageCount, int x, int y, int z) {}
+                               int days, boolean furnished, String description, int imageCount, int x, int y, int z, String catalogue) {}
 
     /** Bien d'un joueur (ou de son entreprise s'il est patron). Pour un bien acheté, view.priceCents = prix d'achat. */
     public record OwnedView(PropertyView view, boolean rented, long expiryMs, long purchaseCents, int companyId, String companyName) {}
@@ -103,16 +103,19 @@ public final class AgencyService {
         BlockPos p = h.first().pos();
         return new PropertyView(h.dimension(), h.name(), info.category(), l == null ? ListingMode.NONE : l.mode(),
                 l == null ? fallbackPrice : l.price(), l == null ? 0 : l.days(), info.furnished(), info.description(),
-                info.imageIds().size(), p.getX(), p.getY(), p.getZ());
+                info.imageIds().size(), p.getX(), p.getY(), p.getZ(), info.catalogue());
     }
 
-    public static List<PropertyView> catalog(MinecraftServer s) {
+    /** Biens disponibles d'un catalogue (« » = l'agence elle-même : les biens qui ont un catalogue n'y figurent pas). */
+    public static List<PropertyView> catalog(MinecraftServer s, String catalogue) {
         OwnerDoorData d = OwnerDoorData.get(s.overworld());
         PropertyInfoData infos = PropertyInfoData.get(s.overworld());
         List<PropertyView> out = new ArrayList<>();
         for (House h : houses(d)) {
             DoorListing l = listing(d, h);
-            if (available(l)) out.add(view(d, infos, h, l, 0));
+            if (!available(l)) continue;
+            PropertyView v = view(d, infos, h, l, 0);
+            if (Catalogues.same(v.catalogue(), catalogue)) out.add(v);
         }
         out.sort((a, b) -> NameOrder.compare(a.houseName(), b.houseName()));
         return out;
@@ -232,6 +235,37 @@ public final class AgencyService {
         return MineNorth.bank().payFromAccount(p.server, EntrepriseCompat.accountId(p.server, companyId), cents, source, p.getUUID());
     }
 
+    /** Compte de l'entreprise qui encaisse les paiements de ce bien (ex. le casino), ou null : règle habituelle (propriétaire, sinon trésor). */
+    private static UUID payeeAccount(MinecraftServer s, PropertyInfoData.PropertyInfo info) {
+        if (info.payeeCompany() <= 0 || !Boolean.TRUE.equals(EntrepriseCompat.isActive(s, info.payeeCompany()))) return null;
+        return EntrepriseCompat.accountId(s, info.payeeCompany());
+    }
+
+    /**
+     * Paiement d'un achat, d'une location ou d'une prolongation. Entreprise bénéficiaire : virement vers son compte (depuis la carte du joueur
+     * ou depuis le compte de l'entreprise payeuse). Sinon : trésor pour une entreprise payeuse, propriétaire ou trésor pour un joueur.
+     */
+    private static PayResult collect(ServerPlayer p, int payerCompany, UUID payeeAcc, UUID landlord, long cents, String source) {
+        var bank = MineNorth.bank();
+        if (payeeAcc == null) return payerCompany > 0 ? payCompany(p, payerCompany, cents, source) : payPersonal(p, landlord, cents, source);
+        if (payerCompany > 0) {
+            UUID from = EntrepriseCompat.accountId(p.server, payerCompany);
+            if (from == null) return PayResult.UNAVAILABLE;
+            return from.equals(payeeAcc) ? PayResult.OK : bank.transfer(p.server, from, payeeAcc, cents);
+        }
+        PayResult check = bank.check(p, cents);
+        return check != PayResult.OK ? check : bank.transfer(p.server, p.getUUID(), payeeAcc, cents);
+    }
+
+    /** Annule un paiement fait par {@link #collect} : l'argent repart de l'entreprise bénéficiaire, ou du trésor. */
+    private static void undoCollect(ServerPlayer p, int payerCompany, UUID payeeAcc, long cents) {
+        var bank = MineNorth.bank();
+        UUID payer = payerCompany > 0 ? EntrepriseCompat.accountId(p.server, payerCompany) : p.getUUID();
+        if (payer == null) return;
+        if (payeeAcc != null) { if (!payeeAcc.equals(payer)) bank.transfer(p.server, payeeAcc, payer, cents); }
+        else bank.refund(p.server, payer, cents, "portes:annulation");
+    }
+
     public static AgencyResult buy(ServerPlayer p, String dimension, String houseName, int companyId) { return acquire(p, dimension, houseName, companyId, false); }
 
     public static AgencyResult rent(ServerPlayer p, String dimension, String houseName, int companyId) { return acquire(p, dimension, houseName, companyId, true); }
@@ -246,7 +280,9 @@ public final class AgencyService {
         if (!available(l) || l.mode() != wanted) return AgencyResult.fail("Ce bien n'est plus disponible.");
         DoorEntry e = d.entry(h.first());
         if (e != null && e.owner() != null && e.owner().equals(p.getUUID())) return AgencyResult.fail("Vous possédez déjà ce bien.");
-        PropertyCategory cat = PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name()).category();
+        var info = PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name());
+        PropertyCategory cat = info.category();
+        UUID payeeAcc = payeeAccount(s, info);
         // Entreprise : obligatoire pour un local d'entreprise, au choix (companyId > 0) pour local, stockage et garage ; ignorée sinon.
         boolean asCompany = cat.companyOnly() || (cat.companyOptional() && companyId > 0);
         long price = l.price();
@@ -258,12 +294,12 @@ public final class AgencyService {
             String err = companyError(p, companyId);
             if (err != null) return AgencyResult.fail(err);
             if (!ImmoRules.canAcquire(cat, heldCountCompany(s, companyId, cat))) return AgencyResult.fail("Limite atteinte pour cette entreprise : " + ImmoRules.limit(cat) + " biens de type « " + cat.label() + " ».");
-            r = payCompany(p, companyId, price, source);
+            r = collect(p, companyId, payeeAcc, null, price, source);
         } else {
             if (!ImmoRules.canAcquire(cat, heldCount(s, p.getUUID(), cat))) {
                 return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + " biens de type « " + cat.label() + " ».");
             }
-            r = payPersonal(p, e == null ? null : e.owner(), price, source);
+            r = collect(p, 0, payeeAcc, e == null ? null : e.owner(), price, source);
         }
         if (r != PayResult.OK) return AgencyResult.fail("Paiement refusé : " + r.message());
         try {
@@ -278,8 +314,7 @@ public final class AgencyService {
             persist(s, d);
         } catch (RuntimeException ex) {
             // Paiement fait mais bien non attribué : on rembourse.
-            if (asCompany) MineNorth.bank().refund(s, EntrepriseCompat.accountId(s, companyId), price, "portes:annulation");
-            else MineNorth.bank().refund(s, p.getUUID(), price, "portes:annulation");
+            undoCollect(p, asCompany ? companyId : 0, payeeAcc, price);
             return AgencyResult.fail("Une erreur est survenue, vous avez été remboursé.");
         }
         return AgencyResult.ok(rental ? "Location activée pour " + l.days() + " jour(s) : " + h.name() + "." : "Achat effectué : " + h.name() + " pour " + euros(price) + ".");
@@ -292,16 +327,17 @@ public final class AgencyService {
         if (h == null) return AgencyResult.fail("Bien introuvable.");
         DoorListing l = listing(d, h);
         if (l == null || l.mode() != ListingMode.RENTAL || !l.rentalActive()) return AgencyResult.fail("Cette location est terminée : louez à nouveau le bien depuis le catalogue.");
+        UUID payeeAcc = payeeAccount(s, PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name()));
         boolean company = l.renterCompany() > 0;
         PayResult r;
         if (company) {
             String err = companyError(p, l.renterCompany());
             if (err != null) return AgencyResult.fail(err);
-            r = payCompany(p, l.renterCompany(), l.price(), "portes:location");
+            r = collect(p, l.renterCompany(), payeeAcc, null, l.price(), "portes:location");
         } else {
             if (!p.getUUID().equals(l.renter())) return AgencyResult.fail("Ce bien n'est pas loué à votre nom.");
             DoorEntry first = d.entry(h.first());
-            r = payPersonal(p, first == null ? null : first.owner(), l.price(), "portes:location");
+            r = collect(p, 0, payeeAcc, first == null ? null : first.owner(), l.price(), "portes:location");
         }
         if (r != PayResult.OK) return AgencyResult.fail("Paiement refusé : " + r.message());
         long expiry = ImmoRules.extendedExpiryMs(System.currentTimeMillis(), l.expiryMs(), l.days());
@@ -332,7 +368,14 @@ public final class AgencyService {
         long refund = ImmoRules.resaleCents(purchase);
         if (refund <= 0) return AgencyResult.fail("Remboursement nul.");
         UUID account = company ? EntrepriseCompat.accountId(s, cid) : p.getUUID();
-        if (account == null || !MineNorth.bank().refund(s, account, refund, "portes:revente")) return AgencyResult.fail("Remboursement impossible : compte bancaire introuvable.");
+        UUID payeeAcc = payeeAccount(s, PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name()));
+        if (account == null) return AgencyResult.fail("Remboursement impossible : compte bancaire introuvable.");
+        if (payeeAcc != null) {
+            // Le bien vient d'une entreprise (ex. casino) : c'est elle qui rachète, pas le trésor.
+            if (!payeeAcc.equals(account) && MineNorth.bank().transfer(s, payeeAcc, account, refund) != PayResult.OK) return AgencyResult.fail("L'entreprise vendeuse n'a pas les fonds pour le rachat.");
+        } else if (!MineNorth.bank().refund(s, account, refund, "portes:revente")) {
+            return AgencyResult.fail("Remboursement impossible : compte bancaire introuvable.");
+        }
         UUID wgMember = company ? EntrepriseCompat.ownerUuid(s, cid) : p.getUUID();
         d.returnHouseToMarket(key, purchase);
         if (wgMember != null) WorldGuardBridge.release(s, h.dimension(), h.name(), wgMember, MineNorth.pseudo(s, wgMember));
