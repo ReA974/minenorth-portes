@@ -164,16 +164,15 @@ public final class TerritoryManager {
     // ------------------------------------------------------------------ revenu passif
 
     private static void payIncome(MinecraftServer s, GangData data, long now) {
-        long perZone = GangConfig.incomePerZone();
-        if (perZone <= 0) return;
-        Map<UUID, Integer> zones = new HashMap<>();
-        for (Territory t : data.territories()) if (t.holder != null) zones.merge(t.holder, 1, Integer::sum);
+        // Chaque zone a son revenu (ou, à défaut, celui des réglages) ; le plafond par heure s'applique ensuite au total du gang.
+        Map<UUID, Long> zones = new HashMap<>();
+        for (Territory t : data.territories()) if (t.holder != null && t.effectiveIncome() > 0) zones.merge(t.holder, t.effectiveIncome(), Long::sum);
         for (var en : zones.entrySet()) {
             Gang g = data.gang(en.getKey());
             if (g == null) continue;
             if (GangConfig.incomeNeedsOnline() && g.members.keySet().stream().noneMatch(m -> s.getPlayerList().getPlayer(m) != null)) continue;
             if (now - g.incomeWindowStart >= 3_600_000L) { g.incomeWindowStart = now; g.incomePaid = 0; }
-            long pay = GangRules.cappedPayout(perZone * en.getValue(), g.incomePaid, GangConfig.incomeCapPerHour());
+            long pay = GangRules.cappedPayout(en.getValue(), g.incomePaid, GangConfig.incomeCapPerHour());
             UUID chef = g.chef();
             if (pay <= 0 || chef == null || !MineNorth.bank().hasAccount(s, chef)) continue;
             if (!MineNorth.bank().refund(s, chef, pay, "gang:territoire")) continue;
@@ -234,6 +233,16 @@ public final class TerritoryManager {
         if (st != null) cleanup(st);
         data.removeTerritory(t.name);
         requestMapRefresh();
+        return null;
+    }
+
+    /** Règle le revenu d'une zone (centimes ; -1 = valeur par défaut). Appliqué au prochain versement. */
+    public static String setIncome(MinecraftServer s, String name, long cents) {
+        Territory t = GangData.get(s).territory(name);
+        if (t == null) return "Territoire introuvable.";
+        if (cents < -1 || cents > Territory.MAX_INCOME) return "Revenu invalide (0 à " + GangService.money(Territory.MAX_INCOME) + ").";
+        t.income = cents;
+        GangData.get(s).setDirty();
         return null;
     }
 

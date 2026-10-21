@@ -24,7 +24,7 @@ public final class GangGui {
 
     public static final int REFRESH = 0, CREATE = 1, INVITE = 2, ACCEPT = 3, DECLINE = 4, KICK = 5, SET_RANK = 6, LEAVE = 7, DISSOLVE = 8,
             DOOR_CLAIM = 9, DOOR_REMOVE = 10, DOOR_RANK = 11, DOOR_REMOVE_REMOTE = 12, SETTINGS = 13,
-            ADMIN_TERR_CREATE = 14, ADMIN_TERR_DELETE = 15, ADMIN_TERR_FREE = 16, ADMIN_DISSOLVE = 17, DOOR_CONTEXT = 18, REFRESH_QUIET = 19;
+            ADMIN_TERR_CREATE = 14, ADMIN_TERR_DELETE = 15, ADMIN_TERR_FREE = 16, ADMIN_DISSOLVE = 17, DOOR_CONTEXT = 18, REFRESH_QUIET = 19, ADMIN_INCOME_ZONE = 20, ADMIN_INCOME_GLOBAL = 21;
 
     private static final double NEARBY = 48.0;
     private static final int LOG_LINES = 40;
@@ -53,6 +53,7 @@ public final class GangGui {
         v.chestsMax = GangConfig.chestsMax();
         v.incomePerZone = GangConfig.incomePerZone();
         v.incomeCap = GangConfig.incomeCapPerHour();
+        v.incomeNeedsOnline = GangConfig.incomeNeedsOnline();
         v.incomeMinutes = (int) (GangConfig.incomeIntervalMs() / 60000L);
         v.invites.addAll(GangService.invitesOf(p));
 
@@ -96,7 +97,7 @@ public final class GangGui {
             boolean mineT = g != null && h != null && h.id.equals(g.id);
             if (mineT) v.zonesHeld++;
             v.territories.add(new GangView.Terr(t.name, t.dim, t.x1, t.z1, t.x2, t.z2,
-                    h == null ? "" : h.tag(), h == null ? "" : h.name(), h == null ? 0x9E9E9E : h.color(), mineT, TerritoryManager.status(data, t, now)));
+                    h == null ? "" : h.tag(), h == null ? "" : h.name(), h == null ? 0x9E9E9E : h.color(), mineT, TerritoryManager.status(data, t, now), t.effectiveIncome(), t.customIncome()));
         }
         if (v.op) for (Gang o : data.gangs()) v.allGangs.add(new GangView.GangInfo(o.name(), o.tag(), o.color(), o.members().size()));
         return v;
@@ -172,10 +173,46 @@ public final class GangGui {
             }
             case ADMIN_TERR_DELETE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.delete(p.server, a); ok = "Territoire supprimé."; }
             case ADMIN_TERR_FREE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.free(p.server, a); ok = "Territoire libéré."; }
+            case ADMIN_INCOME_ZONE -> {
+                if (!p.hasPermissions(2)) return;
+                long cents = parseEuros(b);
+                err = cents == -2 ? "Montant invalide : un nombre d'euros positif (ex. 20 ou 12,50), ou « défaut »." : TerritoryManager.setIncome(p.server, a, cents);
+                ok = cents == -1 ? "Cette zone utilise maintenant le revenu par défaut (au prochain versement)." : "Revenu de la zone enregistré (au prochain versement).";
+            }
+            case ADMIN_INCOME_GLOBAL -> {
+                if (!p.hasPermissions(2)) return;
+                err = setGlobalIncome(a, b);
+                ok = "Réglages du revenu enregistrés (au prochain versement).";
+            }
             case ADMIN_DISSOLVE -> { if (!p.hasPermissions(2)) return; err = GangService.adminDissolve(p, a, "1".equals(b)); ok = "Gang dissous."; }
             default -> { return; }
         }
         send(p, true, 0, 0, 0, err != null ? err : ok, err != null);
+    }
+
+    /** Euros saisis -> centimes (voir GangRules.parseEuros). */
+    static long parseEuros(String s) { return GangRules.parseEuros(s, Territory.MAX_INCOME); }
+
+    /** a = « revenuParZone;plafondHeure;intervalleMinutes » (euros entiers, minutes), b = « 1 » si le versement exige un membre en ligne. Tout est vérifié avant d'appliquer quoi que ce soit. */
+    private static String setGlobalIncome(String a, String b) {
+        String[] parts = a.split(";", -1);
+        if (parts.length != 3) return "Réglages incomplets.";
+        long zone, cap, minutes;
+        try {
+            zone = Long.parseLong(parts[0].trim());
+            cap = Long.parseLong(parts[1].trim());
+            minutes = Long.parseLong(parts[2].trim());
+        } catch (NumberFormatException e) {
+            return "Entrez des nombres entiers (euros, euros, minutes).";
+        }
+        if (zone < 0 || zone > GangConfig.INCOME_ZONE_MAX_EUROS) return "Revenu par zone : 0 à " + GangConfig.INCOME_ZONE_MAX_EUROS + " €.";
+        if (cap < 0 || cap > GangConfig.INCOME_CAP_MAX_EUROS) return "Plafond par heure : 0 à " + GangConfig.INCOME_CAP_MAX_EUROS + " € (0 = pas de plafond).";
+        if (minutes < 1 || minutes > 1440) return "Intervalle : 1 à 1440 minutes.";
+        GangConfig.setIncomePerZoneEuros(zone);
+        GangConfig.setIncomeCapEuros(cap);
+        GangConfig.setIncomeIntervalMinutes(minutes);
+        GangConfig.setIncomeNeedsOnline("1".equals(b));
+        return null;
     }
 
     private static UUID parse(String s) {

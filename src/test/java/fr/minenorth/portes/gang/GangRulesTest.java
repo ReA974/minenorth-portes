@@ -76,6 +76,22 @@ class GangRulesTest {
     }
 
     @Test
+    void revenuSaisi() {
+        long max = 1_000_000L;
+        assertEquals(2000, GangRules.parseEuros("20", max));
+        assertEquals(1250, GangRules.parseEuros(" 12,5 ", max));
+        assertEquals(1205, GangRules.parseEuros("12.05", max));
+        assertEquals(0, GangRules.parseEuros("0", max));
+        assertEquals(-1, GangRules.parseEuros("", max));
+        assertEquals(-1, GangRules.parseEuros("Défaut", max));
+        assertEquals(-2, GangRules.parseEuros("-5", max));
+        assertEquals(-2, GangRules.parseEuros("abc", max));
+        assertEquals(-2, GangRules.parseEuros("1.234", max));
+        assertEquals(-2, GangRules.parseEuros("10001", max));
+        assertEquals(1_000_000L, GangRules.parseEuros("10000", max));
+    }
+
+    @Test
     void cuboide() {
         assertTrue(GangRules.inBox(5, 64, 5, 0, 0, 0, 10, 100, 10));
         assertTrue(GangRules.inBox(5, 64, 5, 10, 100, 10, 0, 0, 0)); // coins dans l'autre ordre

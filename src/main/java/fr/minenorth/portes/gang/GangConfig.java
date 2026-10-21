@@ -60,22 +60,7 @@ public final class GangConfig {
         Path f = file();
         try {
             Files.createDirectories(f.getParent());
-            if (!Files.exists(f)) {
-                java.util.List<String> lines = new java.util.ArrayList<>();
-                lines.add("# ===== GANGS MINENORTH =====");
-                lines.add("# Modifie seulement le nombre (ou true / false) après le « = ». Les prix sont en euros.");
-                lines.add("# Après modification : /gang recharger (opérateur), pas besoin de redémarrer.");
-                lines.add("");
-                for (var e : DEFAULTS.entrySet()) {
-                    String sec = SECTIONS.get(e.getKey());
-                    if (sec != null) { lines.add("# ------------------------------------------------------------"); lines.add("# " + sec); lines.add("# ------------------------------------------------------------"); lines.add(""); }
-                    lines.add("# " + e.getValue()[1] + "  (défaut : " + e.getValue()[0] + ")");
-                    String v = e.getValue()[0];
-                    lines.add(e.getKey() + " = " + v);
-                    lines.add("");
-                }
-                Files.write(f, lines, StandardCharsets.UTF_8);
-            }
+            if (!Files.exists(f)) write(f);
             for (String raw : Files.readAllLines(f, StandardCharsets.UTF_8)) {
                 String line = raw.trim();
                 if (line.isEmpty() || line.startsWith("#") || line.startsWith("[")) continue;
@@ -90,6 +75,37 @@ public final class GangConfig {
             // valeurs par défaut
         }
     }
+
+    /** Écrit le fichier complet (commentaires, sections) avec les valeurs courantes (ou celles par défaut si rien n'a été lu). */
+    private static void write(Path f) throws IOException {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        lines.add("# ===== GANGS MINENORTH =====");
+        lines.add("# Modifie seulement le nombre (ou true / false) après le « = ». Les prix sont en euros.");
+        lines.add("# Après modification : /gang recharger (opérateur), pas besoin de redémarrer.");
+        lines.add("# Le revenu des zones se règle aussi EN JEU : écran « Mon gang » > Admin > Revenus (par zone, et valeurs par défaut ci-dessous).");
+        lines.add("");
+        for (var e : DEFAULTS.entrySet()) {
+            String sec = SECTIONS.get(e.getKey());
+            if (sec != null) { lines.add("# ------------------------------------------------------------"); lines.add("# " + sec); lines.add("# ------------------------------------------------------------"); lines.add(""); }
+            lines.add("# " + e.getValue()[1] + "  (défaut : " + e.getValue()[0] + ")");
+            lines.add(e.getKey() + " = " + raw(e.getKey()));
+            lines.add("");
+        }
+        Files.write(f, lines, StandardCharsets.UTF_8);
+    }
+
+    /** Change un réglage depuis le jeu (valeur déjà vérifiée par l'appelant) et le garde dans le fichier. */
+    private static synchronized void set(String key, String value) {
+        VALUES.put(key, value);
+        try { write(file()); } catch (IOException ignored) { /* le réglage reste actif jusqu'au redémarrage */ }
+    }
+
+    public static final long INCOME_ZONE_MAX_EUROS = 10_000L, INCOME_CAP_MAX_EUROS = 100_000L;
+
+    public static void setIncomePerZoneEuros(long euros) { set("revenu_par_zone_euros", Long.toString(Math.max(0, Math.min(INCOME_ZONE_MAX_EUROS, euros)))); }
+    public static void setIncomeCapEuros(long euros) { set("revenu_plafond_heure_euros", Long.toString(Math.max(0, Math.min(INCOME_CAP_MAX_EUROS, euros)))); }
+    public static void setIncomeIntervalMinutes(long minutes) { set("revenu_intervalle_minutes", Long.toString(Math.max(1, Math.min(1440, minutes)))); }
+    public static void setIncomeNeedsOnline(boolean on) { set("revenu_necessite_en_ligne", Boolean.toString(on)); }
 
     private static String raw(String key) {
         String v = VALUES.get(key);

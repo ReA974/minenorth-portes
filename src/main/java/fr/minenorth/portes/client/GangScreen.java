@@ -34,7 +34,12 @@ public class GangScreen extends Screen {
     private int fColor = SWATCHES[0];
     private String pendingChef = "", pendingKick = "", pendingAdmin = "";
     private boolean leaveStage, dissolveStage;
-    private EditBox eName, eTag, eConfirm, eTerr, eRadius;
+    private EditBox eName, eTag, eConfirm, eTerr, eRadius, eIncZone, eIncCap, eIncInt;
+    private int adminPage;
+    private String fIncZone, fIncCap, fIncInt;
+    private Boolean fOnline;
+    private final java.util.Map<String, String> zoneVals = new java.util.HashMap<>();
+    private final List<Object[]> zoneBoxes = new ArrayList<>();
 
     private final List<Object[]> texts = new ArrayList<>();
     private final List<int[]> cards = new ArrayList<>();
@@ -66,6 +71,7 @@ public class GangScreen extends Screen {
             return;
         }
         if (same) return; // rafraîchissement automatique sans changement : on ne touche pas aux champs en cours de saisie
+        if (action && !nv.messageError) { fIncZone = null; fIncCap = null; fIncInt = null; fOnline = null; zoneVals.clear(); }
         if (action) { leaveStage = false; if (nv.messageError) { dissolveStage = false; pendingChef = ""; pendingKick = ""; pendingAdmin = ""; } }
         rebuildWidgets();
     }
@@ -111,6 +117,10 @@ public class GangScreen extends Screen {
         if (eConfirm != null) fConfirm = eConfirm.getValue();
         if (eTerr != null) fTerrName = eTerr.getValue();
         if (eRadius != null) fRadius = eRadius.getValue();
+        if (eIncZone != null) fIncZone = eIncZone.getValue();
+        if (eIncCap != null) fIncCap = eIncCap.getValue();
+        if (eIncInt != null) fIncInt = eIncInt.getValue();
+        for (Object[] zb : zoneBoxes) zoneVals.put((String) zb[0], ((EditBox) zb[1]).getValue());
     }
 
     private void setTab(int t) {
@@ -134,7 +144,8 @@ public class GangScreen extends Screen {
         super.init();
         clearWidgets();
         texts.clear(); cards.clear(); swatchRects.clear(); mapRects.clear();
-        eName = eTag = eConfirm = eTerr = eRadius = null;
+        eName = eTag = eConfirm = eTerr = eRadius = eIncZone = eIncCap = eIncInt = null;
+        zoneBoxes.clear();
         if (v.doorMode != 0 && !doorClosed) { buildDoor(); return; }
         int x = left(), y = top(), w = PANEL_W;
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
@@ -298,7 +309,7 @@ public class GangScreen extends Screen {
             btn(lx, py, 40, 14, "◀", MineNorthStyle.DARK, () -> { page = Math.max(0, page - 1); rebuildWidgets(); }).enabled(page > 0);
             btn(lx + 44, py, 40, 14, "▶", MineNorthStyle.DARK, () -> { page = Math.min(pages - 1, page + 1); rebuildWidgets(); }).enabled(page < pages - 1);
         }
-        String income = "Revenu : " + MineNorthStyle.euros(v.incomePerZone) + " par zone toutes les " + v.incomeMinutes + " min"
+        String income = "Revenu par défaut : " + MineNorthStyle.euros(v.incomePerZone) + " par zone toutes les " + v.incomeMinutes + " min (survolez une zone pour son revenu)"
                 + (v.incomeCap > 0 ? " (plafond " + MineNorthStyle.euros(v.incomeCap) + "/h)" : "") + ", sur le compte du chef.";
         text(x, y + ch() - 30, income, MineNorthStyle.TEXT);
         text(x, y + ch() - 18, v.inGang ? "Votre gang tient " + v.zonesHeld + " zone(s). Restez à plusieurs dans une zone libre pour la prendre !" : "Rejoignez un gang pour prendre des zones.", MineNorthStyle.MUTED);
@@ -390,6 +401,9 @@ public class GangScreen extends Screen {
     private void buildAdmin() {
         int x = cx(), y = cy();
         text(x, y, "ADMINISTRATION (OP)", MineNorthStyle.PINK);
+        btn(x + 150, y - 4, 110, 16, "Zones et gangs", adminPage == 0 ? MineNorthStyle.PINK : MineNorthStyle.DARK, () -> { keep(); adminPage = 0; page = 0; rebuildWidgets(); });
+        btn(x + 264, y - 4, 80, 16, "Revenus", adminPage == 1 ? MineNorthStyle.PINK : MineNorthStyle.DARK, () -> { keep(); adminPage = 1; page = 0; rebuildWidgets(); });
+        if (adminPage == 1) { buildAdminIncome(x, y); return; }
         text(x, y + 14, "Créer un territoire autour de vous (toute la hauteur)", MineNorthStyle.MUTED);
         eTerr = box(x, y + 26, 200, "Nom du territoire", fTerrName, 32);
         eRadius = box(x + 208, y + 26, 50, "Rayon", fRadius, 3);
@@ -420,6 +434,54 @@ public class GangScreen extends Screen {
                 if (armed) act(GangGui.ADMIN_DISSOLVE, gi.tag(), "1", 0); else { pendingAdmin = gi.tag(); rebuildWidgets(); }
             });
         }
+    }
+
+    /** Admin > Revenus : valeurs par défaut, puis le revenu de chaque zone. Tout est revérifié par le serveur. */
+    private void buildAdminIncome(int x, int y) {
+        if (fIncZone == null) fIncZone = Long.toString(v.incomePerZone / 100L);
+        if (fIncCap == null) fIncCap = Long.toString(v.incomeCap / 100L);
+        if (fIncInt == null) fIncInt = Integer.toString(v.incomeMinutes);
+        if (fOnline == null) fOnline = v.incomeNeedsOnline;
+        text(x, y + 14, "PAR DÉFAUT (toutes les zones sans réglage propre)", MineNorthStyle.BLUE);
+        text(x, y + 28, "Revenu / zone (€)", MineNorthStyle.MUTED);
+        eIncZone = box(x, y + 38, 90, "20", fIncZone, 6);
+        text(x + 100, y + 28, "Plafond par heure (€, 0 = aucun)", MineNorthStyle.MUTED);
+        eIncCap = box(x + 100, y + 38, 90, "120", fIncCap, 7);
+        text(x + 200, y + 28, "Toutes les (min)", MineNorthStyle.MUTED);
+        eIncInt = box(x + 200, y + 38, 70, "10", fIncInt, 4);
+        final boolean online = fOnline;
+        btn(x + 280, y + 37, 226, 20, "Versé seulement si un membre est en ligne : " + (online ? "OUI" : "NON"), MineNorthStyle.DARK, () -> { keep(); fOnline = !online; rebuildWidgets(); });
+        btn(x, y + 62, 190, 20, "ENREGISTRER LES DÉFAUTS", MineNorthStyle.GREEN, () ->
+                act(GangGui.ADMIN_INCOME_GLOBAL, eIncZone.getValue() + ";" + eIncCap.getValue() + ";" + eIncInt.getValue(), online ? "1" : "0", 0));
+        text(x + 200, y + 68, "Le plafond s'applique au total d'un gang. Versé sur le compte du chef.", MineNorthStyle.MUTED);
+
+        text(x, y + 92, "REVENU DE CHAQUE ZONE (€ par versement, vide ou « défaut » = valeur par défaut)", MineNorthStyle.BLUE);
+        int per = Math.max(2, (ch() - 128) / 24);
+        int pages = Math.max(1, (v.territories.size() + per - 1) / per);
+        if (page >= pages) page = pages - 1;
+        if (v.territories.isEmpty()) text(x, y + 108, "Aucun territoire. Créez-en un dans « Zones et gangs ».", MineNorthStyle.MUTED);
+        for (int i = page * per, row = 0; i < v.territories.size() && row < per; i++, row++) {
+            GangView.Terr t = v.territories.get(i);
+            int ry = y + 106 + row * 24;
+            cards.add(new int[]{x, ry, cw(), 22, 0xFF000000 | t.holderColor()});
+            text(x + 8, ry + 7, fit(t.name(), 140), MineNorthStyle.WHITE);
+            text(x + 156, ry + 7, "actuel : " + MineNorthStyle.euros(t.incomeCents()) + (t.customIncome() ? "" : " (défaut)"), t.customIncome() ? MineNorthStyle.WARN : MineNorthStyle.MUTED);
+            String shown = zoneVals.getOrDefault(t.name(), t.customIncome() ? plainEuros(t.incomeCents()) : "");
+            EditBox eb = box(x + 310, ry + 2, 62, "défaut", shown, 10);
+            zoneBoxes.add(new Object[]{t.name(), eb});
+            btn(x + 378, ry + 2, 60, 18, "OK", MineNorthStyle.GREEN, () -> act(GangGui.ADMIN_INCOME_ZONE, t.name(), eb.getValue(), 0));
+            btn(x + 442, ry + 2, 64, 18, "Défaut", MineNorthStyle.DARK, () -> act(GangGui.ADMIN_INCOME_ZONE, t.name(), "defaut", 0));
+        }
+        if (pages > 1) {
+            int py = y + 106 + per * 24;
+            btn(x, py, 40, 14, "◀", MineNorthStyle.DARK, () -> { keep(); page = Math.max(0, page - 1); rebuildWidgets(); }).enabled(page > 0);
+            btn(x + 44, py, 40, 14, "▶", MineNorthStyle.DARK, () -> { keep(); page = Math.min(pages - 1, page + 1); rebuildWidgets(); }).enabled(page < pages - 1);
+            text(x + 92, py + 3, "Page " + (page + 1) + "/" + pages, MineNorthStyle.MUTED);
+        }
+    }
+
+    private static String plainEuros(long cents) {
+        return cents % 100 == 0 ? Long.toString(cents / 100) : String.format(Locale.ROOT, "%d.%02d", cents / 100, cents % 100);
     }
 
     // ---- Fenêtre « porte »
@@ -483,7 +545,7 @@ public class GangScreen extends Screen {
         for (Object[] t : texts) g.drawString(font, (String) t[2], (Integer) t[0], (Integer) t[1], (Integer) t[3], false);
         super.render(g, mx, my, pt);
         if (hover != null) {
-            g.renderTooltip(font, Component.literal(hover.name() + " - " + (hover.holderTag().isEmpty() ? "libre" : hover.holderName() + (hover.status().isEmpty() ? "" : " (" + hover.status() + ")"))), mx, my);
+            g.renderTooltip(font, Component.literal(hover.name() + " - " + (hover.holderTag().isEmpty() ? "libre" : hover.holderName() + (hover.status().isEmpty() ? "" : " (" + hover.status() + ")")) + " - revenu " + MineNorthStyle.euros(hover.incomeCents()) + "/versement"), mx, my);
         }
         if (!door && !v.message.isBlank()) {
             g.drawString(font, fit(v.message, PANEL_W - 32), left() + 16, top() + panelH() - 22, v.messageError ? MineNorthStyle.ALERT : MineNorthStyle.OK, false);

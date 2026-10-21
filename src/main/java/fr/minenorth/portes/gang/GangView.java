@@ -13,7 +13,7 @@ public final class GangView {
     public record Member(String uuid, String name, int rank, boolean online) {}
     public record Nearby(String uuid, String name) {}
     public record DoorInfo(String dim, long pos, int minRank) {}
-    public record Terr(String name, String dim, int x1, int z1, int x2, int z2, String holderTag, String holderName, int holderColor, boolean mine, String status) {}
+    public record Terr(String name, String dim, int x1, int z1, int x2, int z2, String holderTag, String holderName, int holderColor, boolean mine, String status, long incomeCents, boolean customIncome) {}
     public record Invite(String tag, String name, int color, String inviter) {}
     public record GangInfo(String name, String tag, int color, int members) {}
 
@@ -38,6 +38,7 @@ public final class GangView {
     public final List<String> log = new ArrayList<>();
     public final List<Terr> territories = new ArrayList<>();
     public long incomePerZone, incomeCap;
+    public boolean incomeNeedsOnline;
     public int incomeMinutes, zonesHeld;
     public final List<Invite> invites = new ArrayList<>();
     public long createCost;
@@ -55,9 +56,9 @@ public final class GangView {
         b.writeCollection(log, (x, s) -> x.writeUtf(s, 200));
         b.writeCollection(territories, (x, t) -> {
             x.writeUtf(t.name); x.writeUtf(t.dim); x.writeInt(t.x1); x.writeInt(t.z1); x.writeInt(t.x2); x.writeInt(t.z2);
-            x.writeUtf(t.holderTag); x.writeUtf(t.holderName); x.writeInt(t.holderColor); x.writeBoolean(t.mine); x.writeUtf(t.status);
+            x.writeUtf(t.holderTag); x.writeUtf(t.holderName); x.writeInt(t.holderColor); x.writeBoolean(t.mine); x.writeUtf(t.status); x.writeLong(t.incomeCents); x.writeBoolean(t.customIncome);
         });
-        b.writeLong(incomePerZone); b.writeLong(incomeCap); b.writeVarInt(incomeMinutes); b.writeVarInt(zonesHeld);
+        b.writeLong(incomePerZone); b.writeLong(incomeCap); b.writeVarInt(incomeMinutes); b.writeVarInt(zonesHeld); b.writeBoolean(incomeNeedsOnline);
         b.writeCollection(invites, (x, i) -> { x.writeUtf(i.tag); x.writeUtf(i.name); x.writeInt(i.color); x.writeUtf(i.inviter); });
         b.writeLong(createCost); b.writeVarInt(membersMax);
         b.writeCollection(allGangs, (x, g) -> { x.writeUtf(g.name); x.writeUtf(g.tag); x.writeInt(g.color); x.writeVarInt(g.members); });
@@ -74,8 +75,8 @@ public final class GangView {
         v.doorsMax = b.readVarInt(); v.chestsCount = b.readVarInt(); v.chestsMax = b.readVarInt(); v.vaultItems = b.readVarInt(); v.vaultStacks = b.readVarInt();
         v.log.addAll(b.readList(x -> x.readUtf(200)));
         v.territories.addAll(b.readList(x -> new Terr(x.readUtf(), x.readUtf(), x.readInt(), x.readInt(), x.readInt(), x.readInt(),
-                x.readUtf(), x.readUtf(), x.readInt(), x.readBoolean(), x.readUtf())));
-        v.incomePerZone = b.readLong(); v.incomeCap = b.readLong(); v.incomeMinutes = b.readVarInt(); v.zonesHeld = b.readVarInt();
+                x.readUtf(), x.readUtf(), x.readInt(), x.readBoolean(), x.readUtf(), x.readLong(), x.readBoolean())));
+        v.incomePerZone = b.readLong(); v.incomeCap = b.readLong(); v.incomeMinutes = b.readVarInt(); v.zonesHeld = b.readVarInt(); v.incomeNeedsOnline = b.readBoolean();
         v.invites.addAll(b.readList(x -> new Invite(x.readUtf(), x.readUtf(), x.readInt(), x.readUtf())));
         v.createCost = b.readLong(); v.membersMax = b.readVarInt();
         v.allGangs.addAll(b.readList(x -> new GangInfo(x.readUtf(), x.readUtf(), x.readInt(), x.readVarInt())));

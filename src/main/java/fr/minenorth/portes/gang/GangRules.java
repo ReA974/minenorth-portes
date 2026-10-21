@@ -102,6 +102,22 @@ public final class GangRules {
                 && z >= Math.min(z1, z2) && z <= Math.max(z1, z2);
     }
 
+    /**
+     * Euros saisis -> centimes. -1 = « défaut » (ou vide), -2 = invalide (négatif, lettres, plus de 2 décimales, au-delà de maxCents).
+     * Accepte la virgule ou le point comme séparateur.
+     */
+    public static long parseEuros(String s, long maxCents) {
+        String t = s == null ? "" : s.trim().toLowerCase(Locale.ROOT).replace(',', '.');
+        if (t.isEmpty() || t.equals("defaut") || t.equals("défaut")) return -1;
+        if (t.length() > 12 || !t.matches("\\d+(\\.\\d{1,2})?")) return -2;
+        try {
+            long cents = new java.math.BigDecimal(t).movePointRight(2).setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
+            return cents > maxCents ? -2 : cents;
+        } catch (ArithmeticException | NumberFormatException e) {
+            return -2;
+        }
+    }
+
     /** Un nom (pseudo ou nom RP) correspond-il à la saisie ? Casse et espaces autour ignorés. */
     public static boolean sameName(String a, String b) {
         return a != null && b != null && a.trim().equalsIgnoreCase(b.trim());
