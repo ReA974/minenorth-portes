@@ -256,12 +256,15 @@ public final class OwnerDoorManager {
                 p.displayClientMessage(Component.translatable("message.minenorthsysteme.door_denied"), true);
                 e.setCanceled(true);
                 e.setCancellationResult(InteractionResult.FAIL);
-            } else if (e.getHand() == InteractionHand.MAIN_HAND && l.getBlockState(e.getPos()).getBlock() instanceof DoorBlock door
-                    && !door.type().canOpenByHand()) {
-                // Porte en fer : le clic vanilla ne l'ouvre pas, un joueur autorisé doit pouvoir l'ouvrir à la main.
-                toggleDoor(l, e.getPos());
-                e.setCanceled(true);
-                e.setCancellationResult(InteractionResult.SUCCESS);
+            } else {
+                if (e.getHand() == InteractionHand.MAIN_HAND) fr.minenorth.portes.agency.PropertyLog.opened(p, l, e.getPos(), entry);
+                if (e.getHand() == InteractionHand.MAIN_HAND && l.getBlockState(e.getPos()).getBlock() instanceof DoorBlock door
+                        && !door.type().canOpenByHand()) {
+                    // Porte en fer : le clic vanilla ne l'ouvre pas, un joueur autorisé doit pouvoir l'ouvrir à la main.
+                    toggleDoor(l, e.getPos());
+                    e.setCanceled(true);
+                    e.setCancellationResult(InteractionResult.SUCCESS);
+                }
             }
         }
     }

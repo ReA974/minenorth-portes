@@ -444,6 +444,29 @@ public class OwnerDoorData extends SavedData {
         setDirty();
     }
 
+    /** Change le prix de la fiche de vente ou de location de la maison sans toucher au locataire ni à la date de fin. Renvoie vrai si une fiche existait. */
+    public boolean setListingPrice(DoorKey key, long price) {
+        boolean any = false;
+        for (DoorKey k : houseDoors(key)) {
+            DoorListing l = listings.get(k);
+            if (l == null) continue;
+            listings.put(k, new DoorListing(l.mode(), price, l.days(), l.renter(), l.expiryMs(), l.houseName(), l.renterCompany()));
+            any = true;
+        }
+        if (any) setDirty();
+        return any;
+    }
+
+    /** Remet la serrure de toutes les portes de la maison au niveau donné (0 = aucune). */
+    public void setHouseSecurity(DoorKey key, int security) {
+        for (DoorKey k : houseDoors(key)) {
+            DoorEntry e = doors.get(k);
+            if (e == null) continue;
+            doors.put(k, new DoorEntry(e.owner(), e.temporary(), e.ownerName(), e.type(), e.permission(), e.houseName(), e.purchasePrice(), Math.max(0, Math.min(PICK_CHANCE.length - 1, security))));
+        }
+        setDirty();
+    }
+
     public void clearHouseListings(DoorKey key) {
         for (DoorKey k : houseDoors(key)) listings.remove(k);
         setDirty();

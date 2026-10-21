@@ -48,7 +48,7 @@ public final class AgencyService {
     /** Bien d'un joueur (ou de son entreprise s'il est patron). Pour un bien acheté, view.priceCents = prix d'achat. */
     public record OwnedView(PropertyView view, boolean rented, long expiryMs, long purchaseCents, int companyId, String companyName) {}
 
-    private record House(String dimension, String name, List<DoorKey> doors) {
+    record House(String dimension, String name, List<DoorKey> doors) {
         DoorKey first() { return doors.get(0); }
     }
 
@@ -56,7 +56,7 @@ public final class AgencyService {
 
     private static String dimOf(DoorKey k) { return k.dimension().location().toString(); }
 
-    private static List<House> houses(OwnerDoorData d) {
+    static List<House> houses(OwnerDoorData d) {
         Map<String, List<DoorKey>> groups = new LinkedHashMap<>();
         Map<String, String> names = new LinkedHashMap<>();
         for (var e : d.allDoors()) {
@@ -80,14 +80,14 @@ public final class AgencyService {
         return e != null && (e.type() == OwnerDoorData.DoorType.PERSONAL || (e.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(e.permission())));
     }
 
-    private static House find(OwnerDoorData d, String dimension, String houseName) {
+    static House find(OwnerDoorData d, String dimension, String houseName) {
         String wanted = PropertyInfoData.key(dimension, houseName);
         for (House h : houses(d)) if (PropertyInfoData.key(h.dimension(), h.name()).equals(wanted)) return h;
         return null;
     }
 
     /** Fiche active de la maison (première porte qui en a une). */
-    private static DoorListing listing(OwnerDoorData d, House h) {
+    static DoorListing listing(OwnerDoorData d, House h) {
         for (DoorKey k : h.doors()) {
             DoorListing l = d.listing(k);
             if (l != null && l.active()) return l;
@@ -138,7 +138,7 @@ public final class AgencyService {
         return h == null ? null : h.first();
     }
 
-    private static boolean companyDoor(DoorEntry e) {
+    static boolean companyDoor(DoorEntry e) {
         return e.type() == OwnerDoorData.DoorType.ENTREPRISE && EntrepriseCompat.linked(e.permission());
     }
 
@@ -220,13 +220,13 @@ public final class AgencyService {
 
     // ------------------------------------------------------------------ actions
 
-    private static void persist(MinecraftServer s, OwnerDoorData d) {
+    static void persist(MinecraftServer s, OwnerDoorData d) {
         SystemeConfigFiles.writeDoors(s, d);
         ModNetwork.syncDoorLocks(s);
         MapBridge.refresh(s);   // la carte pose / retire le point du local tout de suite
     }
 
-    private static String euros(long cents) { return String.format(Locale.FRANCE, "%.2f €", cents / 100.0); }
+    static String euros(long cents) { return String.format(Locale.FRANCE, "%.2f €", cents / 100.0); }
 
     /** Paiement personnel : au propriétaire s'il a un compte (virement), sinon au trésor public. */
     private static PayResult payPersonal(ServerPlayer payer, UUID owner, long cents, String source) {
@@ -340,6 +340,8 @@ public final class AgencyService {
             undoCollect(p, asCompany ? companyId : 0, payeeAcc, price);
             return AgencyResult.fail("Une erreur est survenue, vous avez été remboursé.");
         }
+        PropertyLog.add(s, h.dimension(), h.name(), (asCompany ? "L'entreprise " + EntrepriseCompat.name(s, companyId) + " (" + p.getGameProfile().getName() + ")" : p.getGameProfile().getName())
+                + (rental ? " loue le bien (" + l.days() + " j, " + euros(price) + ")" : " achète le bien (" + euros(price) + ")"));
         return AgencyResult.ok(rental ? "Location activée pour " + l.days() + " jour(s) : " + h.name() + "." : "Achat effectué : " + h.name() + " pour " + euros(price) + ".");
     }
 
@@ -366,6 +368,7 @@ public final class AgencyService {
         long expiry = ImmoRules.extendedExpiryMs(System.currentTimeMillis(), l.expiryMs(), l.days());
         d.extendRental(h.first(), expiry);
         persist(s, d);
+        PropertyLog.add(s, h.dimension(), h.name(), p.getGameProfile().getName() + " prolonge la location de " + l.days() + " j (" + euros(l.price()) + ")");
         return AgencyResult.ok("Location prolongée de " + l.days() + " jour(s) pour " + euros(l.price()) + ".");
     }
 
@@ -388,6 +391,7 @@ public final class AgencyService {
         d.endRental(h.first());
         if (wgMember != null) WorldGuardBridge.release(s, h.dimension(), h.name(), wgMember, MineNorth.pseudo(s, wgMember));
         persist(s, d);
+        PropertyLog.add(s, h.dimension(), h.name(), p.getGameProfile().getName() + " arrête sa location");
         return AgencyResult.ok("Location arrêtée (aucun remboursement) : « " + h.name() + " » est de nouveau disponible.");
     }
 
@@ -425,6 +429,7 @@ public final class AgencyService {
         d.returnHouseToMarket(key, purchase);
         if (wgMember != null) WorldGuardBridge.release(s, h.dimension(), h.name(), wgMember, MineNorth.pseudo(s, wgMember));
         persist(s, d);
+        PropertyLog.add(s, h.dimension(), h.name(), p.getGameProfile().getName() + " revend le bien (remboursement " + euros(refund) + ")");
         return AgencyResult.ok("Bien revendu : vous récupérez " + euros(refund) + " (" + ImmoRules.RESALE_PERCENT + " % du prix d'achat).");
     }
 }
