@@ -15,7 +15,11 @@ public final class GangClient {
     public static void onView(GangView view) {
         Minecraft mc = Minecraft.getInstance();
         Screen cur = mc.screen;
-        if (cur instanceof GangScreen gs) {
+        if (cur instanceof FactoryScreen fs) {
+            fs.update(view);
+        } else if (view.factory != null && view.open && cur == null && mc.player != null) {
+            mc.setScreen(new FactoryScreen(view));
+        } else if (cur instanceof GangScreen gs) {
             gs.update(view);
         } else if (view.open && cur == null && mc.player != null) {
             mc.setScreen(new GangScreen(view));

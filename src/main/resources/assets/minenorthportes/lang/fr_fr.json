@@ -3,7 +3,10 @@
   "item.minenorthportes.serrure_normal": "Serrure renforcée (Normal)",
   "item.minenorthportes.serrure_avancee": "Serrure renforcée (Avancée)",
   "item.minenorthportes.serrure_expert": "Serrure renforcée (Experte)",
-  "block.minenorthportes.coffre_gang": "Coffre de gang",
+  "block.minenorthportes.coffre_gang": "Ancien coffre de gang (inutilisé)",
   "block.minenorthportes.pancarte_territoire": "Pancarte de territoire",
-  "item.minenorthportes.carnet_gang": "Carnet de gang"
+  "item.minenorthportes.carnet_gang": "Carnet de gang",
+  "block.minenorthportes.fabrique_armes": "Fabrique d'armes",
+  "item.minenorthportes.fabrique_armes": "Fabrique d'armes",
+  "item.minenorthportes.coffre_gang": "Ancien coffre de gang (inutilisé)"
 }

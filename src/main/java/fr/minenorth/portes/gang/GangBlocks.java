@@ -17,9 +17,11 @@ public final class GangBlocks {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MineNorthPortes.MOD_ID);
 
     public static final RegistryObject<Block> GANG_CHEST = BLOCKS.register("coffre_gang", GangChestBlock::new);
+    public static final RegistryObject<Block> FACTORY = BLOCKS.register("fabrique_armes", FactoryBlock::new);
     public static final RegistryObject<Block> TERRITORY_SIGN = BLOCKS.register("pancarte_territoire", TerritorySignBlock::new);
 
     public static final RegistryObject<Item> GANG_CHEST_ITEM = ITEMS.register("coffre_gang", () -> new BlockItem(GANG_CHEST.get(), new Item.Properties().stacksTo(16)));
+    public static final RegistryObject<Item> FACTORY_ITEM = ITEMS.register("fabrique_armes", () -> new BlockItem(FACTORY.get(), new Item.Properties().stacksTo(1)));
     public static final RegistryObject<Item> TERRITORY_SIGN_ITEM = ITEMS.register("pancarte_territoire", () -> new BlockItem(TERRITORY_SIGN.get(), new Item.Properties().stacksTo(16)));
 
     public static final RegistryObject<Item> GANG_BOOK = ITEMS.register("carnet_gang", GangBookItem::new);

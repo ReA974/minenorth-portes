@@ -105,6 +105,8 @@ public final class TerritoryManager {
             if (st.progress == 0 && presence == GangRules.Presence.VIDE) st.attacker = null;
             if (st.attacker != null && st.progress >= GangConfig.captureSeconds()) capture(s, data, t, st, now);
         }
+        // Une capture est en cours contre le gang qui tient la zone : il est prévenu pour sa fabrique d'armes (au plus toutes les 30 s).
+        if (!protectedNow && st.attacker != null && st.progress > 0 && !st.attacker.equals(t.holder())) FactoryManager.threat(s, t);
         updateBar(data, t, st, inside, presence == GangRules.Presence.CONTESTE);
     }
 
@@ -130,6 +132,7 @@ public final class TerritoryManager {
         Component msg = Component.literal("§6§l⚑ " + g.label() + " §6§lprend le contrôle de " + t.name + " !");
         for (ServerPlayer p : s.getPlayerList().getPlayers()) p.sendSystemMessage(msg);
         requestMapRefresh();
+        FactoryManager.onCapture(s, t, g);
     }
 
     private static void updateBar(GangData data, Territory t, State st, List<ServerPlayer> inside, boolean contested) {

@@ -58,15 +58,7 @@ public final class GangService {
     public static String nameOf(MinecraftServer s, UUID id) { return MineNorth.displayName(s, id); }
 
     private static void membershipChanged(MinecraftServer s, Gang ignored) {
-        // Les portes du gang se recalculent tout de suite (un membre exclu ne doit pas rester une seconde de plus),
-        // et tout coffre ouvert par quelqu'un qui n'a plus le droit se referme.
-        GangData data = GangData.get(s);
-        for (ServerPlayer p : s.getPlayerList().getPlayers()) {
-            if (p.containerMenu instanceof GangVaultMenu m) {
-                Gang g = data.gang(m.gangId());
-                if (g == null || !g.isMember(p.getUUID())) p.closeContainer();
-            }
-        }
+        // Les portes du gang se recalculent tout de suite : un membre exclu ne doit pas rester une seconde de plus.
         ModNetwork.syncDoorLocks(s);
         TerritoryManager.requestMapRefresh();
     }
@@ -97,14 +89,10 @@ public final class GangService {
         Gang g = new Gang(UUID.randomUUID(), name, tag, color, System.currentTimeMillis());
         g.members.put(p.getUUID(), GangRank.CHEF);
         data.add(g);
-        attach(data, g);
         tell(p, "§aVotre gang est fondé : " + g.label() + "§a. Ouvrez l'application Mon gang de votre téléphone pour gérer le gang et inviter vos amis.");
         membershipChanged(s, g);
         return null;
     }
-
-    /** Branche la sauvegarde sur le coffre commun : tout changement de contenu marque la donnée à écrire. */
-    static void attach(GangData data, Gang g) { g.vault.addListener(c -> data.setDirty()); }
 
     public static String invite(ServerPlayer inviter, ServerPlayer target) {
         MinecraftServer s = inviter.server;
@@ -208,7 +196,7 @@ public final class GangService {
         if (tp != null) tell(tp, "§cVous avez été exclu de " + g.label() + "§c.");
         notifyGang(s, g, "§e" + name + " a été exclu par " + MineNorth.displayName(actor) + ".");
         membershipChanged(s, g);
-        if (tp != null) { if (tp.containerMenu instanceof GangVaultMenu) tp.closeContainer(); GangGui.send(tp, false); }
+        if (tp != null) GangGui.send(tp, false);
         return null;
     }
 
@@ -285,24 +273,20 @@ public final class GangService {
         Gang g = data.gangOf(actor.getUUID());
         if (g == null) return "Vous n'êtes dans aucun gang.";
         if (g.rankOf(actor.getUUID()) != GangRank.CHEF) return "Seul le chef peut dissoudre le gang.";
-        if (!g.vaultEmpty()) return "Videz d'abord le coffre commun : un gang dissous ne peut pas garder d'objets.";
         if (!confirmed) return "Cette action est définitive. Confirmez dans l'écran.";
         disband(s, g, "Le gang a été dissous par son chef.");
         return null;
     }
 
-    /** Dissolution par un admin ; si force et coffre non vide, le contenu est jeté aux pieds de l'admin. */
+    /** Dissolution par un admin ; ce qui restait à rendre au chef (ancien coffre) est jeté aux pieds de l'admin. */
     public static String adminDissolve(ServerPlayer admin, String gangQuery, boolean force) {
         MinecraftServer s = admin.server;
         GangData data = GangData.get(s);
         Gang g = data.byName(gangQuery);
         if (g == null) return "Gang introuvable.";
-        if (!g.vaultEmpty()) {
-            if (!force) return "Le coffre n'est pas vide : ajoutez « forcer » pour jeter son contenu à vos pieds.";
-            for (int i = 0; i < g.vault.getContainerSize(); i++) {
-                ItemStack st = g.vault.removeItemNoUpdate(i);
-                if (!st.isEmpty()) admin.drop(st, false);
-            }
+        for (ItemStack st : new ArrayList<>(g.legacyItems)) {
+            g.legacyItems.remove(st);
+            admin.drop(st, false);
         }
         disband(s, g, "Le gang a été dissous par un administrateur.");
         return null;
@@ -315,43 +299,43 @@ public final class GangService {
             if (sp != null) tell(sp, "§c" + g.label() + "§c : " + reason);
         }
         GangDoors.releaseAll(s, g);
-        for (ServerPlayer p : s.getPlayerList().getPlayers()) {
-            if (p.containerMenu instanceof GangVaultMenu vm && vm.gangId().equals(g.id)) p.closeContainer();
-        }
+        FactoryManager.destroyAllOf(s, g);
         data.remove(g);
         membershipChanged(s, null);
     }
 
-    // ------------------------------------------------------------------ coffres (blocs)
+    // ------------------------------------------------------------------ base et ancien coffre
 
-    /** Enregistre un bloc « Coffre de gang » qui vient d'être posé. Faux si le joueur n'en a pas le droit. */
-    public static boolean registerChest(ServerPlayer p, String dim, net.minecraft.core.BlockPos pos) {
+    /** Le chef définit la base du gang à l'endroit où il se tient : les portes libres proches pourront rejoindre le gang. */
+    public static String setBase(ServerPlayer p) {
         GangData data = GangData.get(p.server);
         Gang g = data.gangOf(p.getUUID());
-        if (g == null || !g.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT)) return false;
-        if (g.chests.size() >= GangConfig.chestsMax()) return false;
-        if (g.chests.add(new Gang.ChestPos(dim, pos.asLong()))) {
-            g.addLog(p.getUUID(), "pose un coffre de gang", GangConfig.logMax());
-            data.setDirty();
-        }
-        return true;
-    }
-
-    /** Raison du refus de pose, ou null si le joueur peut poser un Coffre de gang. */
-    public static String chestPlacementError(ServerPlayer p) {
-        Gang g = GangData.get(p.server).gangOf(p.getUUID());
-        if (g == null) return "Il faut être dans un gang pour poser un Coffre de gang.";
-        if (!g.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT)) return "Seuls le chef et les lieutenants posent le coffre du gang.";
-        if (g.chests.size() >= GangConfig.chestsMax()) return "Votre gang a déjà " + GangConfig.chestsMax() + " coffres posés.";
+        if (g == null) return "Vous n'êtes dans aucun gang.";
+        if (g.rankOf(p.getUUID()) != GangRank.CHEF) return "Seul le chef définit la base du gang.";
+        if (!allow(p.getUUID(), "base", 3000)) return "Doucement.";
+        g.hasBase = true;
+        g.baseDim = p.level().dimension().location().toString();
+        g.basePos = p.blockPosition().asLong();
+        g.addLog(p.getUUID(), "définit la base du gang", GangConfig.logMax());
+        data.setDirty();
         return null;
     }
 
-    public static void unregisterChest(MinecraftServer s, String dim, net.minecraft.core.BlockPos pos) {
-        GangData data = GangData.get(s);
-        Gang g = data.gangByChest(dim, pos.asLong());
-        if (g == null) return;
-        g.chests.remove(new Gang.ChestPos(dim, pos.asLong()));
-        data.setDirty();
+    /**
+     * Ancien coffre commun (supprimé) : ses objets sont rendus au chef dès qu'il est connecté (inventaire d'abord, le reste au sol à ses pieds),
+     * puis effacés de la sauvegarde. Chaque objet est retiré de la liste AVANT d'être donné : impossible de le recevoir deux fois.
+     */
+    public static void deliverLegacy(ServerPlayer p) {
+        Gang g = GangData.get(p.server).gangOf(p.getUUID());
+        if (g == null || g.legacyItems.isEmpty() || g.rankOf(p.getUUID()) != GangRank.CHEF) return;
+        int n = 0;
+        for (ItemStack st : new ArrayList<>(g.legacyItems)) {
+            g.legacyItems.remove(st);
+            n += st.getCount();
+            if (!p.getInventory().add(st) || !st.isEmpty()) p.drop(st, false);
+        }
+        GangData.get(p.server).setDirty();
+        tell(p, "§6L'ancien coffre de gang a été supprimé : ses " + n + " objet(s) vous sont rendus (ceux qui ne tenaient pas dans l'inventaire sont à vos pieds).");
     }
 
     // ------------------------------------------------------------------ purge d'un joueur (admin)
@@ -363,7 +347,6 @@ public final class GangService {
         if (g == null) return false;
         INVITES.remove(player);
         if (g.members.size() <= 1) {
-            for (int i = 0; i < g.vault.getContainerSize(); i++) g.vault.removeItemNoUpdate(i);
             disband(s, g, "Le gang n'a plus de membres.");
             return true;
         }
@@ -405,7 +388,7 @@ public final class GangService {
         int doors = GangDoors.countDoors(s, g);
         StringBuilder zones = new StringBuilder();
         for (Territory t : GangData.get(s).territories()) if (g.id.equals(t.holder)) { if (zones.length() > 0) zones.append(", "); zones.append(t.name); }
-        out.add("§7Portes : §f" + doors + " §7- Coffres : §f" + g.chests.size() + " §7- Territoires : §f" + (zones.length() == 0 ? "aucun" : zones));
+        out.add("§7Portes : §f" + doors + " §7- Fabriques : §f" + GangData.get(s).factoriesOf(g.id).size() + " §7- Territoires : §f" + (zones.length() == 0 ? "aucun" : zones));
         return out;
     }
 }

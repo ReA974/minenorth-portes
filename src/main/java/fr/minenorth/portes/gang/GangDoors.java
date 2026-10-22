@@ -91,8 +91,8 @@ public final class GangDoors {
             if (!own || od.listing(l, pos) != null) return "Cette porte est déjà protégée : elle ne peut pas être prise par un gang.";
         } else {
             if (od.listing(l, pos) != null) return "Cette porte fait partie d'un bien à vendre ou à louer.";
-            if (!p.hasPermissions(2) && !nearOwnChest(g, l, pos)) {
-                return "Une porte libre doit être près d'un Coffre de gang de votre gang (à moins de " + GangConfig.baseRadius() + " blocs).";
+            if (!canClaimHere(g, l, pos)) {
+                return "Une porte libre doit être dans une zone que votre gang contrôle, ou à moins de " + GangConfig.baseRadius() + " blocs de la base du gang (le chef la définit dans l'onglet Bases).";
             }
         }
         if (countDoors(s, g) >= GangConfig.doorsMax()) return "Votre gang a déjà " + GangConfig.doorsMax() + " portes.";
@@ -105,13 +105,15 @@ public final class GangDoors {
         return null;
     }
 
-    private static boolean nearOwnChest(Gang g, ServerLevel l, BlockPos pos) {
+    /** Une porte libre peut rejoindre le gang si elle est dans une zone que le gang contrôle, ou près de sa base. Les OP suivent la même règle. */
+    static boolean canClaimHere(Gang g, ServerLevel l, BlockPos pos) {
         String dim = l.dimension().location().toString();
-        double r2 = (double) GangConfig.baseRadius() * GangConfig.baseRadius();
-        for (Gang.ChestPos c : g.chests) {
-            if (!c.dim().equals(dim)) continue;
-            BlockPos cp = BlockPos.of(c.pos());
-            if (cp.distSqr(pos) <= r2) return true;
+        for (Territory t : GangData.get(l.getServer()).territories()) {
+            if (g.id.equals(t.holder()) && t.contains(dim, pos.getX(), pos.getY(), pos.getZ())) return true;
+        }
+        if (g.hasBase() && g.baseDim().equals(dim)) {
+            double r = GangConfig.baseRadius();
+            return BlockPos.of(g.basePos()).distSqr(pos) <= r * r;
         }
         return false;
     }
@@ -223,7 +225,7 @@ public final class GangDoors {
         boolean lead = mine.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT);
         BlockPos pos = OwnerDoorData.normalize(l, rawPos);
         if (entry == null) {
-            if (!lead || !nearOwnChest(mine, l, pos) || OwnerDoorData.get(l).listing(l, pos) != null) return false;
+            if (!lead || !canClaimHere(mine, l, pos) || OwnerDoorData.get(l).listing(l, pos) != null) return false;
             if (!GangService.allow(p.getUUID(), "portemsg", 700)) return true;
             GangGui.sendDoor(p, 1, pos, GangRank.MEMBRE.level());
             return true;

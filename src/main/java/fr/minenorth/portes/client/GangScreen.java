@@ -40,6 +40,11 @@ public class GangScreen extends Screen {
     private Boolean fOnline;
     private final java.util.Map<String, String> zoneVals = new java.util.HashMap<>();
     private final List<Object[]> zoneBoxes = new ArrayList<>();
+    private Boolean fFacOn;
+    private String fFacMax, fFacStock, fFacQueue, fFacRank;
+    private EditBox eFacMax, eFacStock, eFacQueue;
+    private final java.util.Map<Integer, String[]> recipeVals = new java.util.HashMap<>();
+    private final List<Object[]> recipeBoxes = new ArrayList<>();
 
     private final List<Object[]> texts = new ArrayList<>();
     private final List<int[]> cards = new ArrayList<>();
@@ -71,7 +76,8 @@ public class GangScreen extends Screen {
             return;
         }
         if (same) return; // rafraîchissement automatique sans changement : on ne touche pas aux champs en cours de saisie
-        if (action && !nv.messageError) { fIncZone = null; fIncCap = null; fIncInt = null; fOnline = null; zoneVals.clear(); }
+        if (action && !nv.messageError) { fIncZone = null; fIncCap = null; fIncInt = null; fOnline = null; zoneVals.clear();
+            fFacOn = null; fFacMax = null; fFacStock = null; fFacQueue = null; fFacRank = null; recipeVals.clear(); }
         if (action) { leaveStage = false; if (nv.messageError) { dissolveStage = false; pendingChef = ""; pendingKick = ""; pendingAdmin = ""; } }
         rebuildWidgets();
     }
@@ -120,6 +126,15 @@ public class GangScreen extends Screen {
         if (eIncZone != null) fIncZone = eIncZone.getValue();
         if (eIncCap != null) fIncCap = eIncCap.getValue();
         if (eIncInt != null) fIncInt = eIncInt.getValue();
+        if (eFacMax != null) fFacMax = eFacMax.getValue();
+        if (eFacStock != null) fFacStock = eFacStock.getValue();
+        if (eFacQueue != null) fFacQueue = eFacQueue.getValue();
+        for (Object[] rb : recipeBoxes) {
+            EditBox[] bx = (EditBox[]) rb[1];
+            String[] vals = new String[bx.length];
+            for (int k = 0; k < bx.length; k++) vals[k] = bx[k].getValue();
+            recipeVals.put((Integer) rb[0], vals);
+        }
         for (Object[] zb : zoneBoxes) zoneVals.put((String) zb[0], ((EditBox) zb[1]).getValue());
     }
 
@@ -146,6 +161,8 @@ public class GangScreen extends Screen {
         texts.clear(); cards.clear(); swatchRects.clear(); mapRects.clear();
         eName = eTag = eConfirm = eTerr = eRadius = eIncZone = eIncCap = eIncInt = null;
         zoneBoxes.clear();
+        recipeBoxes.clear();
+        eFacMax = eFacStock = eFacQueue = null;
         if (v.doorMode != 0 && !doorClosed) { buildDoor(); return; }
         int x = left(), y = top(), w = PANEL_W;
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
@@ -228,15 +245,17 @@ public class GangScreen extends Screen {
         int x = cx(), y = cy();
         boolean lead = v.myRank >= 0 && v.myRank <= 1;
         text(x, y, "BASE DU GANG", MineNorthStyle.BLUE);
-        text(x + 110, y, "Portes " + v.doors.size() + "/" + v.doorsMax + "   Coffres posés " + v.chestsCount + "/" + v.chestsMax + "   Coffre commun : " + v.vaultItems + " objets, " + v.vaultStacks + "/54 cases", MineNorthStyle.TEXT);
-        text(x, y + 12, "Coffre : clic droit sur un Coffre de gang.  Porte : clic droit accroupi dessus.", MineNorthStyle.MUTED);
+        String baseTxt = v.hasBase ? "Base : " + net.minecraft.core.BlockPos.of(v.basePos).toShortString().replace(",", " ") + " (rayon " + v.baseRadius + ")" : "Pas de base définie";
+        text(x + 110, y, baseTxt + "   Portes " + v.doors.size() + "/" + v.doorsMax + "   Fabriques " + v.factoriesCount + "/" + v.factoriesMax, MineNorthStyle.TEXT);
+        text(x, y + 12, "Porte libre : clic droit accroupi, dans une zone que vous contrôlez ou près de la base. Fabrique : voir l'onglet Territoires.", MineNorthStyle.MUTED);
+        if (v.myRank == 0) btn(x, y + 24, 170, 16, "Définir la base ici", MineNorthStyle.GREEN, () -> act(GangGui.SET_BASE, "", "", 0));
         if (v.myRank == 0 || v.op) {
-            btn(x + cw() - 150, y + 24, 150, 16, showLog ? "Voir les portes" : "Journal du coffre", MineNorthStyle.DARK, () -> { showLog = !showLog; page = 0; rebuildWidgets(); });
+            btn(x + cw() - 150, y + 24, 150, 16, showLog ? "Voir les portes" : "Journal du gang", MineNorthStyle.DARK, () -> { showLog = !showLog; page = 0; rebuildWidgets(); });
         }
         int per = Math.max(3, rows() - 1);
         int top = y + 44;
         if (showLog && (v.myRank == 0 || v.op)) {
-            text(x, y + 28, "JOURNAL (retraits et dépôts, du plus récent au plus ancien)", MineNorthStyle.BLUE);
+            text(x + 180, y + 28, "JOURNAL DU GANG (du plus récent au plus ancien)", MineNorthStyle.BLUE);
             if (v.log.isEmpty()) text(x, top + 4, "Rien pour le moment.", MineNorthStyle.MUTED);
             int pages = Math.max(1, (v.log.size() + per - 1) / per);
             if (page >= pages) page = pages - 1;
@@ -246,7 +265,7 @@ public class GangScreen extends Screen {
             logPager(pages);
             return;
         }
-        text(x, y + 28, "PORTES DU GANG", MineNorthStyle.BLUE);
+        text(x + 180, y + 28, "PORTES DU GANG", MineNorthStyle.BLUE);
         if (v.doors.isEmpty()) text(x, top + 4, "Aucune porte. Accroupissez-vous devant une porte libre près de votre Coffre de gang.", MineNorthStyle.MUTED);
         int pages = Math.max(1, (v.doors.size() + per - 1) / per);
         if (page >= pages) page = pages - 1;
@@ -312,7 +331,7 @@ public class GangScreen extends Screen {
         String income = "Revenu par défaut : " + MineNorthStyle.euros(v.incomePerZone) + " par zone toutes les " + v.incomeMinutes + " min (survolez une zone pour son revenu)"
                 + (v.incomeCap > 0 ? " (plafond " + MineNorthStyle.euros(v.incomeCap) + "/h)" : "") + ", sur le compte du chef.";
         text(x, y + ch() - 30, income, MineNorthStyle.TEXT);
-        text(x, y + ch() - 18, v.inGang ? "Votre gang tient " + v.zonesHeld + " zone(s). Restez à plusieurs dans une zone libre pour la prendre !" : "Rejoignez un gang pour prendre des zones.", MineNorthStyle.MUTED);
+        text(x, y + ch() - 18, v.inGang ? "Votre gang tient " + v.zonesHeld + " zone(s). Une zone contrôlée permet de poser une Fabrique d'armes (clic droit dessus pour l'utiliser)." : "Rejoignez un gang pour prendre des zones.", MineNorthStyle.MUTED);
     }
 
     // ---- Paramètres
@@ -403,7 +422,9 @@ public class GangScreen extends Screen {
         text(x, y, "ADMINISTRATION (OP)", MineNorthStyle.PINK);
         btn(x + 150, y - 4, 110, 16, "Zones et gangs", adminPage == 0 ? MineNorthStyle.PINK : MineNorthStyle.DARK, () -> { keep(); adminPage = 0; page = 0; rebuildWidgets(); });
         btn(x + 264, y - 4, 80, 16, "Revenus", adminPage == 1 ? MineNorthStyle.PINK : MineNorthStyle.DARK, () -> { keep(); adminPage = 1; page = 0; rebuildWidgets(); });
+        btn(x + 348, y - 4, 80, 16, "Fabrique", adminPage == 2 ? MineNorthStyle.PINK : MineNorthStyle.DARK, () -> { keep(); adminPage = 2; page = 0; rebuildWidgets(); });
         if (adminPage == 1) { buildAdminIncome(x, y); return; }
+        if (adminPage == 2) { buildAdminFactory(x, y); return; }
         text(x, y + 14, "Créer un territoire autour de vous (toute la hauteur)", MineNorthStyle.MUTED);
         eTerr = box(x, y + 26, 200, "Nom du territoire", fTerrName, 32);
         eRadius = box(x + 208, y + 26, 50, "Rayon", fRadius, 3);
@@ -474,6 +495,63 @@ public class GangScreen extends Screen {
         }
         if (pages > 1) {
             int py = y + 106 + per * 24;
+            btn(x, py, 40, 14, "◀", MineNorthStyle.DARK, () -> { keep(); page = Math.max(0, page - 1); rebuildWidgets(); }).enabled(page > 0);
+            btn(x + 44, py, 40, 14, "▶", MineNorthStyle.DARK, () -> { keep(); page = Math.min(pages - 1, page + 1); rebuildWidgets(); }).enabled(page < pages - 1);
+            text(x + 92, py + 3, "Page " + (page + 1) + "/" + pages, MineNorthStyle.MUTED);
+        }
+    }
+
+    /** Admin > Fabrique : réglages généraux puis recettes (libellé, objet, quantité, secondes, euros). Le serveur revérifie tout. */
+    private void buildAdminFactory(int x, int y) {
+        if (fFacOn == null) fFacOn = v.factoryEnabled;
+        if (fFacMax == null) fFacMax = Integer.toString(v.factoryMaxPerGang);
+        if (fFacStock == null) fFacStock = Integer.toString(v.factoryStockMax);
+        if (fFacQueue == null) fFacQueue = Integer.toString(v.factoryQueueMax);
+        if (fFacRank == null) fFacRank = v.factoryCollectRank;
+        text(x, y + 14, "FABRIQUE D'ARMES (avantage des zones contrôlées)", MineNorthStyle.BLUE);
+        text(x + 128, y + 28, "Par gang", MineNorthStyle.MUTED);
+        text(x + 184, y + 28, "Stock max", MineNorthStyle.MUTED);
+        text(x + 240, y + 28, "File max", MineNorthStyle.MUTED);
+        final boolean on = fFacOn;
+        btn(x, y + 38, 120, 18, "Activée : " + (on ? "OUI" : "NON"), on ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> { keep(); fFacOn = !on; rebuildWidgets(); });
+        eFacMax = box(x + 128, y + 38, 50, "1", fFacMax, 2);
+        eFacStock = box(x + 184, y + 38, 50, "10", fFacStock, 3);
+        eFacQueue = box(x + 240, y + 38, 50, "5", fFacQueue, 2);
+        final String rank = fFacRank;
+        btn(x + 298, y + 38, 130, 18, "Récupérer dès : " + rank, MineNorthStyle.DARK, () -> {
+            keep();
+            fFacRank = rank.equals("membre") ? "lieutenant" : rank.equals("lieutenant") ? "chef" : "membre";
+            rebuildWidgets();
+        });
+        btn(x + 434, y + 38, 72, 18, "ENREGISTRER", MineNorthStyle.GREEN, () ->
+                act(GangGui.ADMIN_FACTORY_GLOBAL, (on ? "1" : "0") + ";" + eFacMax.getValue() + ";" + eFacStock.getValue() + ";" + eFacQueue.getValue() + ";" + rank, "", 0));
+        text(x, y + 62, "RECETTES : libellé | objet (modid:objet{données}) | quantité par lot | secondes | euros", MineNorthStyle.BLUE);
+        int per = Math.max(2, (ch() - 108) / 24);
+        int total = v.adminRecipes.size() + 1; // la dernière ligne sert à en ajouter une
+        int pages = Math.max(1, (total + per - 1) / per);
+        if (page >= pages) page = pages - 1;
+        for (int i = page * per, row = 0; i < total && row < per; i++, row++) {
+            final int idx = i;
+            boolean isNew = i >= v.adminRecipes.size();
+            GangView.Recipe r = isNew ? null : v.adminRecipes.get(i);
+            String[] def = isNew ? new String[]{"", "", "1", "60", "0"}
+                    : new String[]{r.label(), r.spec(), Integer.toString(r.qty()), Integer.toString(r.seconds()), plainEuros(r.cents())};
+            String[] vals = recipeVals.getOrDefault(i, def);
+            int ry = y + 76 + row * 24;
+            cards.add(new int[]{x, ry - 2, cw(), 22, isNew ? MineNorthStyle.GREEN : MineNorthStyle.CYAN});
+            EditBox[] bx = new EditBox[5];
+            bx[0] = box(x + 4, ry, 80, "Libellé", vals[0], 32);
+            bx[1] = box(x + 88, ry, 188, "tacz:ammo{AmmoId:'tacz:9mm'}", vals[1], 220);
+            bx[2] = box(x + 280, ry, 36, "Qté", vals[2], 3);
+            bx[3] = box(x + 320, ry, 40, "Sec", vals[3], 5);
+            bx[4] = box(x + 364, ry, 44, "€", vals[4], 9);
+            recipeBoxes.add(new Object[]{i, bx});
+            btn(x + 412, ry, 34, 18, isNew ? "Ajout" : "OK", MineNorthStyle.GREEN, () ->
+                    act(GangGui.ADMIN_FACTORY_RECIPE, Integer.toString(isNew ? -1 : idx), bx[0].getValue() + "|" + bx[1].getValue() + "|" + bx[2].getValue() + "|" + bx[3].getValue() + "|" + bx[4].getValue(), 0));
+            if (!isNew) btn(x + 450, ry, 52, 18, "Suppr.", MineNorthStyle.PINK, () -> act(GangGui.ADMIN_FACTORY_DELETE, Integer.toString(idx), "", 0));
+        }
+        if (pages > 1) {
+            int py = y + 76 + per * 24;
             btn(x, py, 40, 14, "◀", MineNorthStyle.DARK, () -> { keep(); page = Math.max(0, page - 1); rebuildWidgets(); }).enabled(page > 0);
             btn(x + 44, py, 40, 14, "▶", MineNorthStyle.DARK, () -> { keep(); page = Math.min(pages - 1, page + 1); rebuildWidgets(); }).enabled(page < pages - 1);
             text(x + 92, py + 3, "Page " + (page + 1) + "/" + pages, MineNorthStyle.MUTED);

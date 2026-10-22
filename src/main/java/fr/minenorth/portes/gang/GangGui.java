@@ -24,7 +24,9 @@ public final class GangGui {
 
     public static final int REFRESH = 0, CREATE = 1, INVITE = 2, ACCEPT = 3, DECLINE = 4, KICK = 5, SET_RANK = 6, LEAVE = 7, DISSOLVE = 8,
             DOOR_CLAIM = 9, DOOR_REMOVE = 10, DOOR_RANK = 11, DOOR_REMOVE_REMOTE = 12, SETTINGS = 13,
-            ADMIN_TERR_CREATE = 14, ADMIN_TERR_DELETE = 15, ADMIN_TERR_FREE = 16, ADMIN_DISSOLVE = 17, DOOR_CONTEXT = 18, REFRESH_QUIET = 19, ADMIN_INCOME_ZONE = 20, ADMIN_INCOME_GLOBAL = 21;
+            ADMIN_TERR_CREATE = 14, ADMIN_TERR_DELETE = 15, ADMIN_TERR_FREE = 16, ADMIN_DISSOLVE = 17, DOOR_CONTEXT = 18, REFRESH_QUIET = 19, ADMIN_INCOME_ZONE = 20, ADMIN_INCOME_GLOBAL = 21,
+            SET_BASE = 22, FACTORY_QUEUE = 30, FACTORY_CANCEL = 31, FACTORY_COLLECT = 32, FACTORY_SEIZE = 33, FACTORY_VIEW = 34,
+            ADMIN_FACTORY_GLOBAL = 40, ADMIN_FACTORY_RECIPE = 41, ADMIN_FACTORY_DELETE = 42;
 
     private static final double NEARBY = 48.0;
     private static final int LOG_LINES = 40;
@@ -43,6 +45,7 @@ public final class GangGui {
     public static GangView build(ServerPlayer p, boolean open, int doorMode, long doorPos, int doorMin, String message, boolean error) {
         var server = p.server;
         GangData data = GangData.get(server);
+        GangService.deliverLegacy(p);
         GangView v = new GangView();
         v.open = open; v.doorMode = doorMode; v.doorPos = doorPos; v.doorMin = doorMin;
         v.message = message == null ? "" : message; v.messageError = error;
@@ -50,7 +53,8 @@ public final class GangGui {
         v.createCost = GangConfig.creationCost();
         v.membersMax = GangConfig.membersMax();
         v.doorsMax = GangConfig.doorsMax();
-        v.chestsMax = GangConfig.chestsMax();
+        v.factoriesMax = GangConfig.factoryMaxPerGang();
+        v.baseRadius = GangConfig.baseRadius();
         v.incomePerZone = GangConfig.incomePerZone();
         v.incomeCap = GangConfig.incomeCapPerHour();
         v.incomeNeedsOnline = GangConfig.incomeNeedsOnline();
@@ -77,11 +81,8 @@ public final class GangGui {
                 v.doors.add(new GangView.DoorInfo(k.dimension().location().toString(), k.pos().asLong(),
                         en == null ? GangRank.MEMBRE.level() : GangDoors.minRank(en.permission()).level()));
             }
-            v.chestsCount = g.chests().size();
-            for (int i = 0; i < g.vault().getContainerSize(); i++) {
-                var st = g.vault().getItem(i);
-                if (!st.isEmpty()) { v.vaultStacks++; v.vaultItems += st.getCount(); }
-            }
+            v.factoriesCount = data.factoriesOf(g.id).size();
+            v.hasBase = g.hasBase(); v.baseDim = g.baseDim(); v.basePos = g.basePos();
             if (mine == GangRank.CHEF || v.op) {
                 List<Gang.LogEntry> log = g.log();
                 SimpleDateFormat fmt = new SimpleDateFormat("dd/MM HH:mm");
@@ -99,7 +100,15 @@ public final class GangGui {
             v.territories.add(new GangView.Terr(t.name, t.dim, t.x1, t.z1, t.x2, t.z2,
                     h == null ? "" : h.tag(), h == null ? "" : h.name(), h == null ? 0x9E9E9E : h.color(), mineT, TerritoryManager.status(data, t, now), t.effectiveIncome(), t.customIncome()));
         }
-        if (v.op) for (Gang o : data.gangs()) v.allGangs.add(new GangView.GangInfo(o.name(), o.tag(), o.color(), o.members().size()));
+        if (v.op) {
+            for (Gang o : data.gangs()) v.allGangs.add(new GangView.GangInfo(o.name(), o.tag(), o.color(), o.members().size()));
+            v.factoryEnabled = GangConfig.factoryEnabled();
+            v.factoryMaxPerGang = GangConfig.factoryMaxPerGang();
+            v.factoryStockMax = GangConfig.factoryStockMax();
+            v.factoryQueueMax = GangConfig.factoryQueueMax();
+            v.factoryCollectRank = GangConfig.factoryCollectRank().label().toLowerCase(Locale.ROOT);
+            for (FactoryRecipe r : GangConfig.recipes()) v.adminRecipes.add(new GangView.Recipe(r.label(), r.spec(), r.qty(), r.seconds(), r.cents()));
+        }
         return v;
     }
 
@@ -108,8 +117,8 @@ public final class GangGui {
     public static void handle(ServerPlayer p, int action, String a, String b, long pos) {
         if (!GangService.allow(p.getUUID(), "gui", 150)) return;
         a = a == null ? "" : a; b = b == null ? "" : b;
-        if (a.length() > 64) a = a.substring(0, 64);
-        if (b.length() > 64) b = b.substring(0, 64);
+        if (a.length() > 256) a = a.substring(0, 256);
+        if (b.length() > 256) b = b.substring(0, 256);
         String err = null, ok = null;
         switch (action) {
             case REFRESH -> { send(p, true); return; }
@@ -173,6 +182,11 @@ public final class GangGui {
             }
             case ADMIN_TERR_DELETE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.delete(p.server, a); ok = "Territoire supprimé."; }
             case ADMIN_TERR_FREE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.free(p.server, a); ok = "Territoire libéré."; }
+            case SET_BASE -> { err = GangService.setBase(p); ok = "Base définie ici : les portes libres proches pourront rejoindre le gang."; }
+            case FACTORY_QUEUE, FACTORY_CANCEL, FACTORY_COLLECT, FACTORY_SEIZE, FACTORY_VIEW -> { FactoryManager.handle(p, action, a, b, pos); return; }
+            case ADMIN_FACTORY_GLOBAL -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminGlobal(a); ok = "Réglages de la fabrique enregistrés."; }
+            case ADMIN_FACTORY_RECIPE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminRecipe(a, b); ok = "Recette enregistrée."; }
+            case ADMIN_FACTORY_DELETE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminDelete(a); ok = "Recette supprimée."; }
             case ADMIN_INCOME_ZONE -> {
                 if (!p.hasPermissions(2)) return;
                 long cents = parseEuros(b);

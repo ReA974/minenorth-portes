@@ -16,6 +16,7 @@ public final class GangData extends SavedData {
     /** joueur -> gang (index reconstruit au chargement, tenu à jour par les méthodes ci-dessous). */
     private final Map<UUID, UUID> memberOf = new HashMap<>();
     private final Map<String, Territory> territories = new LinkedHashMap<>();
+    private final Map<String, Factory> factories = new LinkedHashMap<>();
     /** joueur -> instant (ms) de son dernier départ d'un gang. */
     private final Map<UUID, Long> leftAt = new HashMap<>();
 
@@ -39,11 +40,18 @@ public final class GangData extends SavedData {
         return false;
     }
 
-    public Gang gangByChest(String dim, long pos) {
-        Gang.ChestPos c = new Gang.ChestPos(dim, pos);
-        for (Gang g : gangs.values()) if (g.chests.contains(c)) return g;
-        return null;
+    // ---- fabriques d'armes
+    public Factory factory(String dim, long pos) { return factories.get(Factory.key(dim, pos)); }
+    public Collection<Factory> factories() { return Collections.unmodifiableCollection(factories.values()); }
+
+    public List<Factory> factoriesOf(UUID gang) {
+        List<Factory> out = new ArrayList<>();
+        for (Factory f : factories.values()) if (f.gang.equals(gang)) out.add(f);
+        return out;
     }
+
+    void addFactory(Factory f) { factories.put(f.key(), f); setDirty(); }
+    void removeFactory(Factory f) { if (factories.remove(f.key()) != null) setDirty(); }
 
     public Collection<Territory> territories() { return Collections.unmodifiableCollection(territories.values()); }
     public Territory territory(String name) { return name == null ? null : territories.get(name.toLowerCase(Locale.ROOT)); }
@@ -61,6 +69,7 @@ public final class GangData extends SavedData {
     void remove(Gang g) {
         gangs.remove(g.id);
         for (UUID m : g.members.keySet()) memberOf.remove(m, g.id);
+        factories.values().removeIf(f -> f.gang.equals(g.id));
         for (Territory t : territories.values()) if (g.id.equals(t.holder)) t.holder = null;
         setDirty();
     }
@@ -94,7 +103,6 @@ public final class GangData extends SavedData {
             if (g.members.isEmpty()) continue;
             if (g.chef() == null) g.members.put(g.members.keySet().iterator().next(), GangRank.CHEF);
             d.gangs.put(g.id, g);
-            GangService.attach(d, g);
             for (UUID m : g.members.keySet()) d.memberOf.put(m, g.id);
         }
         ListTag tl = tag.getList("Territories", Tag.TAG_COMPOUND);
@@ -103,6 +111,11 @@ public final class GangData extends SavedData {
             if (t == null) continue;
             if (t.holder != null && !d.gangs.containsKey(t.holder)) t.holder = null;
             d.territories.put(t.name.toLowerCase(Locale.ROOT), t);
+        }
+        ListTag fl = tag.getList("Factories", Tag.TAG_COMPOUND);
+        for (int i = 0; i < fl.size(); i++) {
+            Factory f = Factory.load(fl.getCompound(i));
+            if (f != null && d.gangs.containsKey(f.gang)) d.factories.put(f.key(), f);
         }
         ListTag ll = tag.getList("Left", Tag.TAG_COMPOUND);
         for (int i = 0; i < ll.size(); i++) {
@@ -120,6 +133,9 @@ public final class GangData extends SavedData {
         ListTag tl = new ListTag();
         for (Territory t : territories.values()) tl.add(t.save());
         tag.put("Territories", tl);
+        ListTag fl = new ListTag();
+        for (Factory f : factories.values()) fl.add(f.save());
+        tag.put("Factories", fl);
         ListTag ll = new ListTag();
         long now = System.currentTimeMillis();
         for (var e : leftAt.entrySet()) {

@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,11 +34,10 @@ public final class GangConfig {
         def("membres_max", "30", "Nombre maximum de membres par gang.");
         def("invitation_secondes", "120", "Combien de temps une invitation reste valable, en secondes.");
         def("delai_apres_depart_minutes", "5", "Minutes à attendre avant de rejoindre ou créer un autre gang après être parti d'un gang.");
-        section("portes_max", "BASE, PORTES ET COFFRES");
+        section("portes_max", "BASE ET PORTES");
         def("portes_max", "12", "Nombre maximum de portes qu'un gang peut posséder.");
-        def("coffres_max", "3", "Nombre maximum de « Coffres de gang » par gang (ils ouvrent tous le même coffre commun).");
-        def("base_rayon", "32", "Distance en blocs : une porte ne peut rejoindre un gang que si un Coffre de gang est à moins de cette distance.");
-        def("journal_coffre_max", "200", "Nombre de lignes gardées dans l'historique du coffre commun.");
+        def("base_rayon", "32", "Distance en blocs autour de la base du gang (point défini par le chef) : une porte libre ne peut rejoindre le gang que dans ce rayon, ou dans une zone que le gang contrôle.");
+        def("journal_max", "200", "Nombre de lignes gardées dans le journal du gang (portes, fabrique…).");
         section("crochetage_portes_gang", "CROCHETAGE DES PORTES DE GANG");
         def("crochetage_portes_gang", "true", "true = les autres joueurs peuvent crocheter les portes d'un gang (le gang est prévenu). false = impossible.");
         def("crochetage_chance_pourcent", "35", "Chance de réussite en % (1 à 100), une fois le mini-jeu gagné.");
@@ -51,12 +52,29 @@ public final class GangConfig {
         def("revenu_par_zone_euros", "20", "Revenu en euros par zone et par versement, sur le compte du chef (0 = aucun revenu).");
         def("revenu_plafond_heure_euros", "120", "Maximum en euros qu'un gang peut toucher par heure (0 = pas de plafond).");
         def("revenu_necessite_en_ligne", "true", "true = le revenu n'est versé que si au moins un membre du gang est connecté.");
+        section("fabrique_active", "FABRIQUE D'ARMES (avantage des zones contrôlées)");
+        def("fabrique_active", "true", "true = les gangs peuvent poser une Fabrique d'armes dans une zone qu'ils contrôlent. false = désactivée (les fabriques posées s'arrêtent).");
+        def("fabrique_max_par_gang", "1", "Nombre maximum de fabriques par gang (une seule par zone contrôlée dans tous les cas).");
+        def("fabrique_stock_max", "10", "Nombre maximum de lots prêts + en fabrication dans une fabrique (plafond de stock).");
+        def("fabrique_file_max", "5", "Nombre maximum de fabrications en attente dans la file.");
+        def("fabrique_grade_recuperer", "lieutenant", "Grade minimum pour récupérer le stock : membre, lieutenant ou chef. (Lancer une fabrication : chef et lieutenants.)");
+    }
+
+    /** Recettes de la fabrique (lignes « Libellé | objet | quantité | secondes | euros ») : modifiables en jeu, écrites en fin de fichier. */
+    private static final List<String> RECIPES = new ArrayList<>(defaultRecipes());
+
+    private static List<String> defaultRecipes() {
+        return List.of(
+                "Munitions 9 mm | tacz:ammo{AmmoId:'tacz:9mm'} | 30 | 90 | 25",
+                "Munitions .45 ACP | tacz:ammo{AmmoId:'tacz:45acp'} | 30 | 90 | 30",
+                "Pistolet Glock 17 | tacz:modern_kinetic_gun{GunId:'tacz:glock_17',GunCurrentAmmoCount:0} | 1 | 600 | 400");
     }
 
     private static Path file() { return SystemeConfigFiles.getRoot().resolve("minenorth_gangs.toml"); }
 
     public static synchronized void load() {
         VALUES.clear();
+        List<String> found = new ArrayList<>();
         Path f = file();
         try {
             Files.createDirectories(f.getParent());
@@ -69,8 +87,15 @@ public final class GangConfig {
                 String v = line.substring(eq + 1).trim();
                 int hash = v.indexOf('#');
                 if (hash >= 0) v = v.substring(0, hash).trim();
-                VALUES.put(line.substring(0, eq).trim(), v.replace("\"", ""));
+                String key = line.substring(0, eq).trim();
+                if (key.startsWith("fabrique_recette_")) found.add(v.replace("\"", "").trim());
+                else VALUES.put(key, v.replace("\"", ""));
             }
+            // Recettes : celles du fichier si elles sont lisibles, sinon (ancien fichier sans recettes) celles par défaut.
+            List<String> ok = new ArrayList<>();
+            for (String l : found) if (FactoryRecipe.parse(l) != null) ok.add(l);
+            RECIPES.clear();
+            RECIPES.addAll(found.isEmpty() ? defaultRecipes() : ok);
         } catch (IOException ignored) {
             // valeurs par défaut
         }
@@ -91,6 +116,18 @@ public final class GangConfig {
             lines.add(e.getKey() + " = " + raw(e.getKey()));
             lines.add("");
         }
+        lines.add("# ------------------------------------------------------------");
+        lines.add("# FABRIQUE D'ARMES : RECETTES (une par ligne, modifiables aussi en jeu)");
+        lines.add("# ------------------------------------------------------------");
+        lines.add("# Format : \"Libellé | objet | quantité par lot | secondes | prix en euros\"");
+        lines.add("# L'objet est « modid:objet » suivi si besoin de ses données entre accolades (apostrophes pour les textes), comme TACZ :");
+        lines.add("#   armes     : tacz:modern_kinetic_gun{GunId:'tacz:glock_17',GunCurrentAmmoCount:0}");
+        lines.add("#   munitions : tacz:ammo{AmmoId:'tacz:9mm'}");
+        lines.add("# Le prix est prélevé sur le compte bancaire du chef quand on lance la fabrication.");
+        lines.add("");
+        int n = 1;
+        for (String r : RECIPES) lines.add("fabrique_recette_" + n++ + " = \"" + r + "\"");
+        lines.add("");
         Files.write(f, lines, StandardCharsets.UTF_8);
     }
 
@@ -126,11 +163,10 @@ public final class GangConfig {
     public static long inviteMs() { return num("invitation_secondes", 10, 3600) * 1000L; }
     public static long leaveDelayMs() { return num("delai_apres_depart_minutes", 0, 1440) * 60_000L; }
     public static int doorsMax() { return (int) num("portes_max", 1, 200); }
-    public static int chestsMax() { return (int) num("coffres_max", 1, 20); }
     public static int baseRadius() { return (int) num("base_rayon", 4, 128); }
     public static boolean lockpickGangDoors() { return flag("crochetage_portes_gang"); }
     public static int lockpickChance() { return (int) num("crochetage_chance_pourcent", 1, 100); }
-    public static int logMax() { return (int) num("journal_coffre_max", 20, 1000); }
+    public static int logMax() { return (int) num("journal_max", 20, 1000); }
     public static int captureSeconds() { return (int) num("capture_secondes", 10, 3600); }
     public static int captureMinMembers() { return (int) num("capture_min_membres", 1, 20); }
     public static int captureDecay() { return (int) num("capture_recul_secondes", 0, 60); }
@@ -139,5 +175,26 @@ public final class GangConfig {
     public static long incomePerZone() { return num("revenu_par_zone_euros", 0, 100_000L) * 100L; }
     public static long incomeCapPerHour() { return num("revenu_plafond_heure_euros", 0, 1_000_000L) * 100L; }
     public static boolean incomeNeedsOnline() { return flag("revenu_necessite_en_ligne"); }
+    public static boolean factoryEnabled() { return flag("fabrique_active"); }
+    public static int factoryMaxPerGang() { return (int) num("fabrique_max_par_gang", 1, 10); }
+    public static int factoryStockMax() { return (int) num("fabrique_stock_max", 1, 100); }
+    public static int factoryQueueMax() { return (int) num("fabrique_file_max", 1, 20); }
+    /** Grade minimum pour récupérer le stock : 0 chef, 1 lieutenant, 2 membre. */
+    public static GangRank factoryCollectRank() { GangRank r = GangRank.parse(raw("fabrique_grade_recuperer")); return r == null ? GangRank.LIEUTENANT : r; }
+
+    public static synchronized List<FactoryRecipe> recipes() { return FactoryRecipe.parseAll(RECIPES); }
+
+    public static synchronized void setRecipes(List<FactoryRecipe> list) {
+        RECIPES.clear();
+        for (FactoryRecipe r : list) RECIPES.add(r.format());
+        try { write(file()); } catch (IOException ignored) { /* reste actif jusqu'au redémarrage */ }
+    }
+
+    public static void setFactoryEnabled(boolean on) { set("fabrique_active", Boolean.toString(on)); }
+    public static void setFactoryMaxPerGang(long n) { set("fabrique_max_par_gang", Long.toString(Math.max(1, Math.min(10, n)))); }
+    public static void setFactoryStockMax(long n) { set("fabrique_stock_max", Long.toString(Math.max(1, Math.min(100, n)))); }
+    public static void setFactoryQueueMax(long n) { set("fabrique_file_max", Long.toString(Math.max(1, Math.min(20, n)))); }
+    public static void setFactoryCollectRank(GangRank r) { set("fabrique_grade_recuperer", r.label().toLowerCase(java.util.Locale.ROOT)); }
+
     public static long alertMs() { return num("territoire_alerte_secondes", 5, 600) * 1000L; }
 }
