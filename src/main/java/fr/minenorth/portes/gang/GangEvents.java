@@ -16,6 +16,17 @@ import net.minecraftforge.fml.common.Mod;
 public final class GangEvents {
     private GangEvents() {}
 
+    private static final org.slf4j.Logger LOG = com.mojang.logging.LogUtils.getLogger();
+    /** Dernière pose de fabrique refusée par NOTRE règle (pour distinguer un refus venu d'un autre mod, ex. WorldGuard). */
+    private static BlockEvent.EntityPlaceEvent ownCancel;
+
+    /** Refus visible : message dans le chat (il reste affiché) + barre d'action + trace dans le journal du serveur. */
+    static void refuse(ServerPlayer p, String why, String what) {
+        p.sendSystemMessage(Component.literal("§c✖ " + what + " : " + why));
+        p.displayClientMessage(Component.literal("§c" + why), true);
+        LOG.info("[Portes/gangs] {} : refus ({}) pour {} ({}) - {}", what, why, p.getGameProfile().getName(), p.getUUID(), p.blockPosition());
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onPlace(BlockEvent.EntityPlaceEvent e) {
         Block b = e.getPlacedBlock().getBlock();
@@ -28,7 +39,20 @@ public final class GangEvents {
         else if (!p.hasPermissions(2)) err = "Seul un administrateur pose une pancarte de territoire.";
         if (err != null) {
             e.setCanceled(true);
-            p.displayClientMessage(Component.literal("§c" + err), true);
+            ownCancel = e;
+            refuse(p, err, factory ? "Pose de la Fabrique d'armes" : chest ? "Pose du coffre de gang" : "Pose de la pancarte");
+        }
+    }
+
+    /**
+     * Si la pose d'une fabrique est annulée par UN AUTRE mod (protection WorldGuard, zone protégée…), on le dit au joueur au lieu de laisser
+     * le bloc disparaître sans explication.
+     */
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public static void onPlaceCanceledByOther(BlockEvent.EntityPlaceEvent e) {
+        if (!e.isCanceled() || e == ownCancel || !(e.getPlacedBlock().getBlock() instanceof FactoryBlock)) return;
+        if (e.getEntity() instanceof ServerPlayer p) {
+            refuse(p, "un autre système (protection de la zone, WorldGuard…) a refusé la pose ici. Demandez au staff de vous donner le droit de construire à cet endroit.", "Pose de la Fabrique d'armes");
         }
     }
 

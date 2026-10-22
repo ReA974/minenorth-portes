@@ -304,6 +304,74 @@ public final class GangService {
         membershipChanged(s, null);
     }
 
+    // ------------------------------------------------------------------ compte du gang
+
+    public static final long BALANCE_MAX = 100_000_000_000L; // 1 milliard d'euros (en centimes)
+
+    /** Le joueur a-t-il le droit de dépenser l'argent du gang ? (grade minimum choisi par le chef : chef seul, ou chef + lieutenants) */
+    public static boolean canSpend(Gang g, UUID player) {
+        GangRank r = g.rankOf(player);
+        return r != null && r.level() <= g.spendRank;
+    }
+
+    public static String spendRule(Gang g) { return g.spendRank == 0 ? "le chef seul" : "le chef et les lieutenants"; }
+
+    /** Ajoute de l'argent au compte du gang (revenu, dépôt, remboursement). Pas de contrôle de grade : c'est l'appelant qui décide. */
+    static void credit(MinecraftServer s, Gang g, long cents, UUID actor, String label) {
+        if (cents <= 0) return;
+        g.balance = Math.min(BALANCE_MAX, g.balance + cents);
+        g.addTx(actor, cents, label);
+        GangData.get(s).setDirty();
+    }
+
+    /** Dépense depuis le compte du gang : vérifie le grade du joueur et le solde, retire l'argent, l'inscrit à l'historique. Renvoie l'erreur ou null. */
+    static String spend(MinecraftServer s, Gang g, UUID actor, long cents, String label, String treasurySource) {
+        if (cents <= 0) return null;
+        if (!canSpend(g, actor)) return "Le chef n'autorise que " + spendRule(g) + " à dépenser l'argent du gang.";
+        if (g.balance < cents) return "Le compte du gang n'a pas assez d'argent : " + money(g.balance) + " disponibles, " + money(cents) + " nécessaires.";
+        g.balance -= cents;
+        g.addTx(actor, -cents, label);
+        MineNorth.treasury().collect(s, cents, treasurySource); // l'argent dépensé retourne au trésor, comme tout argent prélevé
+        GangData.get(s).setDirty();
+        return null;
+    }
+
+    /** Remboursement d'une dépense (fabrication annulée avant d'avoir commencé) : l'argent revient au compte du gang. */
+    static void refundToGang(MinecraftServer s, Gang g, long cents, UUID actor, String label, String treasurySource) {
+        if (cents <= 0) return;
+        MineNorth.treasury().collect(s, -cents, treasurySource);
+        credit(s, g, cents, actor, label);
+    }
+
+    /** Dépôt d'un membre : payé par sa carte, l'argent arrive sur le compte du gang (le trésor général n'est ni gagnant ni perdant). */
+    public static String deposit(ServerPlayer p, long cents) {
+        MinecraftServer s = p.server;
+        Gang g = GangData.get(s).gangOf(p.getUUID());
+        if (g == null) return "Vous n'êtes dans aucun gang.";
+        if (cents < 100 || cents > 10_000_000L) return "Dépôt : de 1 € à 100 000 €.";
+        if (g.balance + cents > BALANCE_MAX) return "Le compte du gang est plein.";
+        if (!allow(p.getUUID(), "depot", 1500)) return "Doucement.";
+        PayResult r = MineNorth.bank().charge(p, cents, "gang:depot");
+        if (!r.ok()) return r.message();
+        MineNorth.treasury().collect(s, -cents, "gang:depot"); // charge() l'a versé au trésor : on le reprend, il va au gang
+        credit(s, g, cents, p.getUUID(), "Dépôt de " + MineNorth.displayName(p));
+        notifyGang(s, g, "§a" + MineNorth.displayName(p) + " a déposé §f" + money(cents) + " §asur le compte du gang.");
+        return null;
+    }
+
+    /** Le chef choisit qui peut dépenser l'argent du gang : le chef seul (0) ou le chef et les lieutenants (1). */
+    public static String setSpendRank(ServerPlayer p, GangRank r) {
+        GangData data = GangData.get(p.server);
+        Gang g = data.gangOf(p.getUUID());
+        if (g == null) return "Vous n'êtes dans aucun gang.";
+        if (g.rankOf(p.getUUID()) != GangRank.CHEF) return "Seul le chef règle qui peut dépenser.";
+        if (r != GangRank.CHEF && r != GangRank.LIEUTENANT) return "Choisissez : le chef seul, ou le chef et les lieutenants.";
+        g.spendRank = r.level();
+        g.addLog(p.getUUID(), "règle les dépenses : " + spendRule(g), GangConfig.logMax());
+        data.setDirty();
+        return null;
+    }
+
     // ------------------------------------------------------------------ base et ancien coffre
 
     /** Le chef définit la base du gang à l'endroit où il se tient : les portes libres proches pourront rejoindre le gang. */

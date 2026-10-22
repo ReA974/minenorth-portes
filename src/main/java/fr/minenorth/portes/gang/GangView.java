@@ -16,42 +16,60 @@ public final class GangView {
     public record Terr(String name, String dim, int x1, int z1, int x2, int z2, String holderTag, String holderName, int holderColor, boolean mine, String status, long incomeCents, boolean customIncome) {}
     public record Invite(String tag, String name, int color, String inviter) {}
     public record GangInfo(String name, String tag, int color, int members) {}
-    /** Recette de la fabrique ; spec n'est rempli que pour les OP (édition en jeu). */
-    public record Recipe(String label, String spec, int qty, int seconds, long cents) {}
+    /** Recette de la fabrique ; spec n'est rempli que pour les OP (édition en jeu). needs = « acier:5;poudre:1 ». */
+    public record Recipe(String label, String spec, int qty, int seconds, long cents, String needs) {}
     public record JobInfo(String label, int qty, int total, int remaining) {}
     public record LotInfo(String label, int qty) {}
+    /** Matière première d'une fabrique : réserve actuelle et plafond, quantité et prix d'un achat. */
+    public record MatInfo(String id, String label, int stock, int cap, int pack, long cents) {}
+    /** Définition d'une matière (édition en jeu, OP). */
+    public record MaterialDef(String label, String id, int pack, long cents) {}
+    /** Mouvement du compte du gang. */
+    public record TxInfo(String when, String who, long delta, String label) {}
 
     /** Écran de la fabrique (clic droit sur le bloc). */
     public static final class FactoryInfo {
         public String dim = "";
         public long pos;
-        public String gangName = "", gangTag = "", zone = "", status = "", collectRank = "";
+        public String gangName = "", gangTag = "", zone = "", status = "", collectRank = "", spendRank = "";
         public int gangColor;
-        public boolean running, mine, canQueue, canCollect, canSeize;
+        public boolean running, mine, canQueue, canCollect, canSeize, canSpend;
+        public long balance;
         public int stockMax, queueMax;
         public final List<JobInfo> queue = new ArrayList<>();
         public final List<LotInfo> stock = new ArrayList<>();
         public final List<Recipe> recipes = new ArrayList<>();
+        public final List<MatInfo> materials = new ArrayList<>();
 
         void encode(FriendlyByteBuf b) {
-            b.writeUtf(dim); b.writeLong(pos); b.writeUtf(gangName); b.writeUtf(gangTag); b.writeUtf(zone); b.writeUtf(status, 200); b.writeUtf(collectRank);
-            b.writeInt(gangColor); b.writeBoolean(running); b.writeBoolean(mine); b.writeBoolean(canQueue); b.writeBoolean(canCollect); b.writeBoolean(canSeize);
-            b.writeVarInt(stockMax); b.writeVarInt(queueMax);
+            b.writeUtf(dim); b.writeLong(pos); b.writeUtf(gangName); b.writeUtf(gangTag); b.writeUtf(zone); b.writeUtf(status, 200); b.writeUtf(collectRank); b.writeUtf(spendRank);
+            b.writeInt(gangColor); b.writeBoolean(running); b.writeBoolean(mine); b.writeBoolean(canQueue); b.writeBoolean(canCollect); b.writeBoolean(canSeize); b.writeBoolean(canSpend);
+            b.writeLong(balance); b.writeVarInt(stockMax); b.writeVarInt(queueMax);
             b.writeCollection(queue, (x, j) -> { x.writeUtf(j.label); x.writeVarInt(j.qty); x.writeVarInt(j.total); x.writeVarInt(j.remaining); });
             b.writeCollection(stock, (x, l) -> { x.writeUtf(l.label); x.writeVarInt(l.qty); });
-            b.writeCollection(recipes, (x, r) -> { x.writeUtf(r.label); x.writeUtf(r.spec, 256); x.writeVarInt(r.qty); x.writeVarInt(r.seconds); x.writeLong(r.cents); });
+            b.writeCollection(recipes, GangView::writeRecipe);
+            b.writeCollection(materials, (x, m) -> { x.writeUtf(m.id); x.writeUtf(m.label); x.writeVarInt(m.stock); x.writeVarInt(m.cap); x.writeVarInt(m.pack); x.writeLong(m.cents); });
         }
 
         static FactoryInfo decode(FriendlyByteBuf b) {
             FactoryInfo f = new FactoryInfo();
-            f.dim = b.readUtf(); f.pos = b.readLong(); f.gangName = b.readUtf(); f.gangTag = b.readUtf(); f.zone = b.readUtf(); f.status = b.readUtf(200); f.collectRank = b.readUtf();
-            f.gangColor = b.readInt(); f.running = b.readBoolean(); f.mine = b.readBoolean(); f.canQueue = b.readBoolean(); f.canCollect = b.readBoolean(); f.canSeize = b.readBoolean();
-            f.stockMax = b.readVarInt(); f.queueMax = b.readVarInt();
+            f.dim = b.readUtf(); f.pos = b.readLong(); f.gangName = b.readUtf(); f.gangTag = b.readUtf(); f.zone = b.readUtf(); f.status = b.readUtf(200); f.collectRank = b.readUtf(); f.spendRank = b.readUtf();
+            f.gangColor = b.readInt(); f.running = b.readBoolean(); f.mine = b.readBoolean(); f.canQueue = b.readBoolean(); f.canCollect = b.readBoolean(); f.canSeize = b.readBoolean(); f.canSpend = b.readBoolean();
+            f.balance = b.readLong(); f.stockMax = b.readVarInt(); f.queueMax = b.readVarInt();
             f.queue.addAll(b.readList(x -> new JobInfo(x.readUtf(), x.readVarInt(), x.readVarInt(), x.readVarInt())));
             f.stock.addAll(b.readList(x -> new LotInfo(x.readUtf(), x.readVarInt())));
-            f.recipes.addAll(b.readList(x -> new Recipe(x.readUtf(), x.readUtf(256), x.readVarInt(), x.readVarInt(), x.readLong())));
+            f.recipes.addAll(b.readList(GangView::readRecipe));
+            f.materials.addAll(b.readList(x -> new MatInfo(x.readUtf(), x.readUtf(), x.readVarInt(), x.readVarInt(), x.readVarInt(), x.readLong())));
             return f;
         }
+    }
+
+    private static void writeRecipe(FriendlyByteBuf x, Recipe r) {
+        x.writeUtf(r.label); x.writeUtf(r.spec, 256); x.writeVarInt(r.qty); x.writeVarInt(r.seconds); x.writeLong(r.cents); x.writeUtf(r.needs, 128);
+    }
+
+    private static Recipe readRecipe(FriendlyByteBuf x) {
+        return new Recipe(x.readUtf(), x.readUtf(256), x.readVarInt(), x.readVarInt(), x.readLong(), x.readUtf(128));
     }
 
     /** Le client ouvre l'écran (s'il n'a pas déjà un écran ouvert). */
@@ -80,17 +98,23 @@ public final class GangView {
     public final List<String> log = new ArrayList<>();
     public final List<Terr> territories = new ArrayList<>();
     public long incomePerZone, incomeCap;
-    public boolean incomeNeedsOnline;
+    public boolean incomeNeedsOnline, incomeToGang;
     public int incomeMinutes, zonesHeld;
     public final List<Invite> invites = new ArrayList<>();
     public long createCost;
     public int membersMax;
     public final List<GangInfo> allGangs = new ArrayList<>();
+    /** Compte du gang : solde, grade minimum pour dépenser (0 chef, 1 lieutenant), droit du joueur, historique (récent d'abord). */
+    public long balance;
+    public int spendRank = 1;
+    public boolean canSpend;
+    public final List<TxInfo> txs = new ArrayList<>();
     /** Réglages de la fabrique (OP : édition en jeu). */
     public boolean factoryEnabled;
-    public int factoryMaxPerGang, factoryStockMax, factoryQueueMax;
+    public int factoryMaxPerGang, factoryStockMax, factoryQueueMax, materialCap;
     public String factoryCollectRank = "";
     public final List<Recipe> adminRecipes = new ArrayList<>();
+    public final List<MaterialDef> adminMaterials = new ArrayList<>();
     /** Non nul : ouvrir l'écran de la fabrique. */
     public FactoryInfo factory;
 
@@ -108,12 +132,15 @@ public final class GangView {
             x.writeUtf(t.name); x.writeUtf(t.dim); x.writeInt(t.x1); x.writeInt(t.z1); x.writeInt(t.x2); x.writeInt(t.z2);
             x.writeUtf(t.holderTag); x.writeUtf(t.holderName); x.writeInt(t.holderColor); x.writeBoolean(t.mine); x.writeUtf(t.status); x.writeLong(t.incomeCents); x.writeBoolean(t.customIncome);
         });
-        b.writeLong(incomePerZone); b.writeLong(incomeCap); b.writeVarInt(incomeMinutes); b.writeVarInt(zonesHeld); b.writeBoolean(incomeNeedsOnline);
+        b.writeLong(incomePerZone); b.writeLong(incomeCap); b.writeVarInt(incomeMinutes); b.writeVarInt(zonesHeld); b.writeBoolean(incomeNeedsOnline); b.writeBoolean(incomeToGang);
         b.writeCollection(invites, (x, i) -> { x.writeUtf(i.tag); x.writeUtf(i.name); x.writeInt(i.color); x.writeUtf(i.inviter); });
         b.writeLong(createCost); b.writeVarInt(membersMax);
         b.writeCollection(allGangs, (x, g) -> { x.writeUtf(g.name); x.writeUtf(g.tag); x.writeInt(g.color); x.writeVarInt(g.members); });
-        b.writeBoolean(factoryEnabled); b.writeVarInt(factoryMaxPerGang); b.writeVarInt(factoryStockMax); b.writeVarInt(factoryQueueMax); b.writeUtf(factoryCollectRank);
-        b.writeCollection(adminRecipes, (x, r) -> { x.writeUtf(r.label); x.writeUtf(r.spec, 256); x.writeVarInt(r.qty); x.writeVarInt(r.seconds); x.writeLong(r.cents); });
+        b.writeLong(balance); b.writeVarInt(spendRank); b.writeBoolean(canSpend);
+        b.writeCollection(txs, (x, t) -> { x.writeUtf(t.when); x.writeUtf(t.who); x.writeLong(t.delta); x.writeUtf(t.label, 120); });
+        b.writeBoolean(factoryEnabled); b.writeVarInt(factoryMaxPerGang); b.writeVarInt(factoryStockMax); b.writeVarInt(factoryQueueMax); b.writeVarInt(materialCap); b.writeUtf(factoryCollectRank);
+        b.writeCollection(adminRecipes, GangView::writeRecipe);
+        b.writeCollection(adminMaterials, (x, m) -> { x.writeUtf(m.label); x.writeUtf(m.id); x.writeVarInt(m.pack); x.writeLong(m.cents); });
         b.writeBoolean(factory != null);
         if (factory != null) factory.encode(b);
     }
@@ -131,12 +158,15 @@ public final class GangView {
         v.log.addAll(b.readList(x -> x.readUtf(200)));
         v.territories.addAll(b.readList(x -> new Terr(x.readUtf(), x.readUtf(), x.readInt(), x.readInt(), x.readInt(), x.readInt(),
                 x.readUtf(), x.readUtf(), x.readInt(), x.readBoolean(), x.readUtf(), x.readLong(), x.readBoolean())));
-        v.incomePerZone = b.readLong(); v.incomeCap = b.readLong(); v.incomeMinutes = b.readVarInt(); v.zonesHeld = b.readVarInt(); v.incomeNeedsOnline = b.readBoolean();
+        v.incomePerZone = b.readLong(); v.incomeCap = b.readLong(); v.incomeMinutes = b.readVarInt(); v.zonesHeld = b.readVarInt(); v.incomeNeedsOnline = b.readBoolean(); v.incomeToGang = b.readBoolean();
         v.invites.addAll(b.readList(x -> new Invite(x.readUtf(), x.readUtf(), x.readInt(), x.readUtf())));
         v.createCost = b.readLong(); v.membersMax = b.readVarInt();
         v.allGangs.addAll(b.readList(x -> new GangInfo(x.readUtf(), x.readUtf(), x.readInt(), x.readVarInt())));
-        v.factoryEnabled = b.readBoolean(); v.factoryMaxPerGang = b.readVarInt(); v.factoryStockMax = b.readVarInt(); v.factoryQueueMax = b.readVarInt(); v.factoryCollectRank = b.readUtf();
-        v.adminRecipes.addAll(b.readList(x -> new Recipe(x.readUtf(), x.readUtf(256), x.readVarInt(), x.readVarInt(), x.readLong())));
+        v.balance = b.readLong(); v.spendRank = b.readVarInt(); v.canSpend = b.readBoolean();
+        v.txs.addAll(b.readList(x -> new TxInfo(x.readUtf(), x.readUtf(), x.readLong(), x.readUtf(120))));
+        v.factoryEnabled = b.readBoolean(); v.factoryMaxPerGang = b.readVarInt(); v.factoryStockMax = b.readVarInt(); v.factoryQueueMax = b.readVarInt(); v.materialCap = b.readVarInt(); v.factoryCollectRank = b.readUtf();
+        v.adminRecipes.addAll(b.readList(GangView::readRecipe));
+        v.adminMaterials.addAll(b.readList(x -> new MaterialDef(x.readUtf(), x.readUtf(), x.readVarInt(), x.readLong())));
         if (b.readBoolean()) v.factory = FactoryInfo.decode(b);
         return v;
     }

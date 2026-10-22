@@ -19,10 +19,12 @@ public final class Factory {
         public final String label, spec;
         public final int qty, totalSeconds;
         public final long cents;
+        /** Matières consommées au lancement (« id:quantité;… »), rendues si la fabrication est annulée avant de commencer. */
+        public final String needs;
         public int remaining;
 
-        Job(String label, String spec, int qty, int totalSeconds, int remaining, long cents) {
-            this.label = label; this.spec = spec; this.qty = qty; this.totalSeconds = totalSeconds; this.remaining = remaining; this.cents = cents;
+        Job(String label, String spec, int qty, int totalSeconds, int remaining, long cents, String needs) {
+            this.label = label; this.spec = spec; this.qty = qty; this.totalSeconds = totalSeconds; this.remaining = remaining; this.cents = cents; this.needs = needs == null ? "" : needs;
         }
     }
 
@@ -34,6 +36,8 @@ public final class Factory {
     UUID gang;
     final List<Job> queue = new ArrayList<>();
     final List<Lot> stock = new ArrayList<>();
+    /** Matières premières en réserve (identifiant -> quantité), achetées avec l'argent du gang. */
+    final java.util.Map<String, Integer> materials = new java.util.LinkedHashMap<>();
     /** Dernière alerte « fabrique menacée » (mémoire seulement). */
     transient long lastAlert;
     transient boolean lit;
@@ -43,6 +47,7 @@ public final class Factory {
     public UUID gang() { return gang; }
     public List<Job> queue() { return queue; }
     public List<Lot> stock() { return stock; }
+    public java.util.Map<String, Integer> materials() { return materials; }
 
     static String key(String dim, long pos) { return dim + "|" + pos; }
     String key() { return key(dim, pos); }
@@ -53,7 +58,7 @@ public final class Factory {
         ListTag q = new ListTag();
         for (Job j : queue) {
             CompoundTag c = new CompoundTag();
-            c.putString("Label", j.label); c.putString("Spec", j.spec); c.putInt("Qty", j.qty); c.putInt("Total", j.totalSeconds); c.putInt("Left", j.remaining); c.putLong("Cents", j.cents);
+            c.putString("Label", j.label); c.putString("Spec", j.spec); c.putInt("Qty", j.qty); c.putInt("Total", j.totalSeconds); c.putInt("Left", j.remaining); c.putLong("Cents", j.cents); c.putString("Needs", j.needs);
             q.add(c);
         }
         t.put("Queue", q);
@@ -64,6 +69,13 @@ public final class Factory {
             s.add(c);
         }
         t.put("Stock", s);
+        ListTag m = new ListTag();
+        for (var e : materials.entrySet()) {
+            CompoundTag c = new CompoundTag();
+            c.putString("Id", e.getKey()); c.putInt("N", e.getValue());
+            m.add(c);
+        }
+        t.put("Mats", m);
         return t;
     }
 
@@ -73,12 +85,17 @@ public final class Factory {
         ListTag q = t.getList("Queue", Tag.TAG_COMPOUND);
         for (int i = 0; i < q.size(); i++) {
             CompoundTag c = q.getCompound(i);
-            f.queue.add(new Job(c.getString("Label"), c.getString("Spec"), Math.max(1, c.getInt("Qty")), Math.max(1, c.getInt("Total")), Math.max(0, c.getInt("Left")), Math.max(0, c.getLong("Cents"))));
+            f.queue.add(new Job(c.getString("Label"), c.getString("Spec"), Math.max(1, c.getInt("Qty")), Math.max(1, c.getInt("Total")), Math.max(0, c.getInt("Left")), Math.max(0, c.getLong("Cents")), c.getString("Needs")));
         }
         ListTag s = t.getList("Stock", Tag.TAG_COMPOUND);
         for (int i = 0; i < s.size(); i++) {
             CompoundTag c = s.getCompound(i);
             f.stock.add(new Lot(c.getString("Label"), c.getString("Spec"), Math.max(1, c.getInt("Qty"))));
+        }
+        ListTag m = t.getList("Mats", Tag.TAG_COMPOUND);
+        for (int i = 0; i < m.size(); i++) {
+            CompoundTag c = m.getCompound(i);
+            if (!c.getString("Id").isBlank() && c.getInt("N") > 0) f.materials.put(c.getString("Id"), c.getInt("N"));
         }
         return f;
     }

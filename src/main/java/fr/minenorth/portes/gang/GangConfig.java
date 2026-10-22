@@ -52,12 +52,14 @@ public final class GangConfig {
         def("revenu_par_zone_euros", "20", "Revenu en euros par zone et par versement, sur le compte du chef (0 = aucun revenu).");
         def("revenu_plafond_heure_euros", "120", "Maximum en euros qu'un gang peut toucher par heure (0 = pas de plafond).");
         def("revenu_necessite_en_ligne", "true", "true = le revenu n'est versé que si au moins un membre du gang est connecté.");
+        def("revenu_destination", "gang", "Où va le revenu des zones : gang = compte du gang (solde propre, sert à acheter pour la fabrique), chef = compte bancaire personnel du chef (ancien fonctionnement).");
         section("fabrique_active", "FABRIQUE D'ARMES (avantage des zones contrôlées)");
         def("fabrique_active", "true", "true = les gangs peuvent poser une Fabrique d'armes dans une zone qu'ils contrôlent. false = désactivée (les fabriques posées s'arrêtent).");
         def("fabrique_max_par_gang", "1", "Nombre maximum de fabriques par gang (une seule par zone contrôlée dans tous les cas).");
         def("fabrique_stock_max", "10", "Nombre maximum de lots prêts + en fabrication dans une fabrique (plafond de stock).");
         def("fabrique_file_max", "5", "Nombre maximum de fabrications en attente dans la file.");
-        def("fabrique_grade_recuperer", "lieutenant", "Grade minimum pour récupérer le stock : membre, lieutenant ou chef. (Lancer une fabrication : chef et lieutenants.)");
+        def("fabrique_grade_recuperer", "lieutenant", "Grade minimum pour récupérer le stock : membre, lieutenant ou chef.");
+        def("fabrique_matiere_max", "200", "Réserve maximum de chaque matière première dans une fabrique.");
     }
 
     /** Recettes de la fabrique (lignes « Libellé | objet | quantité | secondes | euros ») : modifiables en jeu, écrites en fin de fichier. */
@@ -65,9 +67,16 @@ public final class GangConfig {
 
     private static List<String> defaultRecipes() {
         return List.of(
-                "Munitions 9 mm | tacz:ammo{AmmoId:'tacz:9mm'} | 30 | 90 | 25",
-                "Munitions .45 ACP | tacz:ammo{AmmoId:'tacz:45acp'} | 30 | 90 | 30",
-                "Pistolet Glock 17 | tacz:modern_kinetic_gun{GunId:'tacz:glock_17',GunCurrentAmmoCount:0} | 1 | 600 | 400");
+                "Munitions 9 mm | tacz:ammo{AmmoId:'tacz:9mm'} | 30 | 90 | 0 | laiton:2;poudre:1",
+                "Munitions .45 ACP | tacz:ammo{AmmoId:'tacz:45acp'} | 30 | 90 | 0 | laiton:2;poudre:2",
+                "Pistolet Glock 17 | tacz:modern_kinetic_gun{GunId:'tacz:glock_17',GunCurrentAmmoCount:0} | 1 | 600 | 100 | acier:5");
+    }
+
+    /** Matières premières (lignes « Libellé | identifiant | quantité par achat | prix en euros ») : modifiables en jeu. */
+    private static final List<String> MATERIALS = new ArrayList<>(defaultMaterials());
+
+    private static List<String> defaultMaterials() {
+        return List.of("Acier | acier | 10 | 60", "Laiton | laiton | 20 | 30", "Poudre | poudre | 20 | 40");
     }
 
     private static Path file() { return SystemeConfigFiles.getRoot().resolve("minenorth_gangs.toml"); }
@@ -75,6 +84,7 @@ public final class GangConfig {
     public static synchronized void load() {
         VALUES.clear();
         List<String> found = new ArrayList<>();
+        List<String> foundMats = new ArrayList<>();
         Path f = file();
         try {
             Files.createDirectories(f.getParent());
@@ -89,6 +99,7 @@ public final class GangConfig {
                 if (hash >= 0) v = v.substring(0, hash).trim();
                 String key = line.substring(0, eq).trim();
                 if (key.startsWith("fabrique_recette_")) found.add(v.replace("\"", "").trim());
+                else if (key.startsWith("fabrique_matiere_") && !key.equals("fabrique_matiere_max")) foundMats.add(v.replace("\"", "").trim());
                 else VALUES.put(key, v.replace("\"", ""));
             }
             // Recettes : celles du fichier si elles sont lisibles, sinon (ancien fichier sans recettes) celles par défaut.
@@ -96,6 +107,10 @@ public final class GangConfig {
             for (String l : found) if (FactoryRecipe.parse(l) != null) ok.add(l);
             RECIPES.clear();
             RECIPES.addAll(found.isEmpty() ? defaultRecipes() : ok);
+            MATERIALS.clear();
+            List<String> okMats = new ArrayList<>();
+            for (String l : foundMats) if (FactoryMaterial.parse(l) != null) okMats.add(l);
+            MATERIALS.addAll(foundMats.isEmpty() ? defaultMaterials() : okMats);
         } catch (IOException ignored) {
             // valeurs par défaut
         }
@@ -127,6 +142,16 @@ public final class GangConfig {
         lines.add("");
         int n = 1;
         for (String r : RECIPES) lines.add("fabrique_recette_" + n++ + " = \"" + r + "\"");
+        lines.add("");
+        lines.add("# Colonne facultative « besoins » : matières consommées au lancement, ex. acier:5;poudre:1 (identifiants des matières ci-dessous).");
+        lines.add("");
+        lines.add("# ------------------------------------------------------------");
+        lines.add("# FABRIQUE D'ARMES : MATIÈRES PREMIÈRES (achetées avec l'argent du compte du gang, modifiables aussi en jeu)");
+        lines.add("# ------------------------------------------------------------");
+        lines.add("# Format : \"Libellé | identifiant | quantité reçue par achat | prix d'un achat en euros\"");
+        lines.add("");
+        int mi = 1;
+        for (String m : MATERIALS) lines.add("fabrique_matiere_" + mi++ + " = \"" + m + "\"");
         lines.add("");
         Files.write(f, lines, StandardCharsets.UTF_8);
     }
@@ -181,6 +206,19 @@ public final class GangConfig {
     public static int factoryQueueMax() { return (int) num("fabrique_file_max", 1, 20); }
     /** Grade minimum pour récupérer le stock : 0 chef, 1 lieutenant, 2 membre. */
     public static GangRank factoryCollectRank() { GangRank r = GangRank.parse(raw("fabrique_grade_recuperer")); return r == null ? GangRank.LIEUTENANT : r; }
+
+    public static boolean incomeToGang() { return !raw("revenu_destination").equalsIgnoreCase("chef"); }
+    public static void setIncomeToGang(boolean gang) { set("revenu_destination", gang ? "gang" : "chef"); }
+    public static int materialCap() { return (int) num("fabrique_matiere_max", 1, 100_000); }
+    public static void setMaterialCap(long n) { set("fabrique_matiere_max", Long.toString(Math.max(1, Math.min(100_000, n)))); }
+
+    public static synchronized List<FactoryMaterial> materials() { return FactoryMaterial.parseAll(MATERIALS); }
+
+    public static synchronized void setMaterials(List<FactoryMaterial> list) {
+        MATERIALS.clear();
+        for (FactoryMaterial m : list) MATERIALS.add(m.format());
+        try { write(file()); } catch (IOException ignored) { /* reste actif jusqu'au redémarrage */ }
+    }
 
     public static synchronized List<FactoryRecipe> recipes() { return FactoryRecipe.parseAll(RECIPES); }
 

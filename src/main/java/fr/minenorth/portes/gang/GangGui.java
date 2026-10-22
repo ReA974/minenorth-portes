@@ -26,7 +26,8 @@ public final class GangGui {
             DOOR_CLAIM = 9, DOOR_REMOVE = 10, DOOR_RANK = 11, DOOR_REMOVE_REMOTE = 12, SETTINGS = 13,
             ADMIN_TERR_CREATE = 14, ADMIN_TERR_DELETE = 15, ADMIN_TERR_FREE = 16, ADMIN_DISSOLVE = 17, DOOR_CONTEXT = 18, REFRESH_QUIET = 19, ADMIN_INCOME_ZONE = 20, ADMIN_INCOME_GLOBAL = 21,
             SET_BASE = 22, FACTORY_QUEUE = 30, FACTORY_CANCEL = 31, FACTORY_COLLECT = 32, FACTORY_SEIZE = 33, FACTORY_VIEW = 34,
-            ADMIN_FACTORY_GLOBAL = 40, ADMIN_FACTORY_RECIPE = 41, ADMIN_FACTORY_DELETE = 42;
+            ADMIN_FACTORY_GLOBAL = 40, ADMIN_FACTORY_RECIPE = 41, ADMIN_FACTORY_DELETE = 42, ADMIN_MATERIAL = 43, ADMIN_MATERIAL_DELETE = 44,
+            FACTORY_BUY = 35, GANG_DEPOSIT = 50, GANG_SPEND_RANK = 51;
 
     private static final double NEARBY = 48.0;
     private static final int LOG_LINES = 40;
@@ -58,6 +59,7 @@ public final class GangGui {
         v.incomePerZone = GangConfig.incomePerZone();
         v.incomeCap = GangConfig.incomeCapPerHour();
         v.incomeNeedsOnline = GangConfig.incomeNeedsOnline();
+        v.incomeToGang = GangConfig.incomeToGang();
         v.incomeMinutes = (int) (GangConfig.incomeIntervalMs() / 60000L);
         v.invites.addAll(GangService.invitesOf(p));
 
@@ -82,6 +84,13 @@ public final class GangGui {
                         en == null ? GangRank.MEMBRE.level() : GangDoors.minRank(en.permission()).level()));
             }
             v.factoriesCount = data.factoriesOf(g.id).size();
+            v.balance = g.balance(); v.spendRank = g.spendRank().level(); v.canSpend = GangService.canSpend(g, p.getUUID());
+            SimpleDateFormat txFmt = new SimpleDateFormat("dd/MM HH:mm");
+            List<Gang.Tx> txs = g.txs();
+            for (int i = txs.size() - 1; i >= 0 && v.txs.size() < 40; i--) {
+                Gang.Tx x = txs.get(i);
+                v.txs.add(new GangView.TxInfo(txFmt.format(new Date(x.timeMs())), x.actor() == null ? "Automatique" : GangService.nameOf(server, x.actor()), x.delta(), x.label()));
+            }
             v.hasBase = g.hasBase(); v.baseDim = g.baseDim(); v.basePos = g.basePos();
             if (mine == GangRank.CHEF || v.op) {
                 List<Gang.LogEntry> log = g.log();
@@ -106,8 +115,10 @@ public final class GangGui {
             v.factoryMaxPerGang = GangConfig.factoryMaxPerGang();
             v.factoryStockMax = GangConfig.factoryStockMax();
             v.factoryQueueMax = GangConfig.factoryQueueMax();
+            v.materialCap = GangConfig.materialCap();
+            for (FactoryMaterial m : GangConfig.materials()) v.adminMaterials.add(new GangView.MaterialDef(m.label(), m.id(), m.pack(), m.cents()));
             v.factoryCollectRank = GangConfig.factoryCollectRank().label().toLowerCase(Locale.ROOT);
-            for (FactoryRecipe r : GangConfig.recipes()) v.adminRecipes.add(new GangView.Recipe(r.label(), r.spec(), r.qty(), r.seconds(), r.cents()));
+            for (FactoryRecipe r : GangConfig.recipes()) v.adminRecipes.add(new GangView.Recipe(r.label(), r.spec(), r.qty(), r.seconds(), r.cents(), r.needs()));
         }
         return v;
     }
@@ -184,6 +195,19 @@ public final class GangGui {
             case ADMIN_TERR_FREE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.free(p.server, a); ok = "Territoire libéré."; }
             case SET_BASE -> { err = GangService.setBase(p); ok = "Base définie ici : les portes libres proches pourront rejoindre le gang."; }
             case FACTORY_QUEUE, FACTORY_CANCEL, FACTORY_COLLECT, FACTORY_SEIZE, FACTORY_VIEW -> { FactoryManager.handle(p, action, a, b, pos); return; }
+            case FACTORY_BUY -> { FactoryManager.handle(p, action, a, b, pos); return; }
+            case GANG_DEPOSIT -> {
+                long cents = GangRules.parseEuros(a, 10_000_000L);
+                err = cents < 100 ? "Dépôt : un montant de 1 € à 100 000 €." : GangService.deposit(p, cents);
+                ok = "Dépôt effectué : l'argent est sur le compte du gang.";
+            }
+            case GANG_SPEND_RANK -> {
+                GangRank r = GangRank.parse(a);
+                err = r == null ? "Grade inconnu." : GangService.setSpendRank(p, r);
+                ok = "Règle des dépenses enregistrée.";
+            }
+            case ADMIN_MATERIAL -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminMaterial(a, b); ok = "Matière enregistrée."; }
+            case ADMIN_MATERIAL_DELETE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminMaterialDelete(a); ok = "Matière supprimée."; }
             case ADMIN_FACTORY_GLOBAL -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminGlobal(a); ok = "Réglages de la fabrique enregistrés."; }
             case ADMIN_FACTORY_RECIPE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminRecipe(a, b); ok = "Recette enregistrée."; }
             case ADMIN_FACTORY_DELETE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminDelete(a); ok = "Recette supprimée."; }
@@ -207,10 +231,12 @@ public final class GangGui {
     /** Euros saisis -> centimes (voir GangRules.parseEuros). */
     static long parseEuros(String s) { return GangRules.parseEuros(s, Territory.MAX_INCOME); }
 
-    /** a = « revenuParZone;plafondHeure;intervalleMinutes » (euros entiers, minutes), b = « 1 » si le versement exige un membre en ligne. Tout est vérifié avant d'appliquer quoi que ce soit. */
+    /** a = « revenuParZone;plafondHeure;intervalleMinutes;destination » (euros entiers, minutes, destination gang ou chef), b = « 1 » si le versement exige un membre en ligne. Tout est vérifié avant d'appliquer quoi que ce soit. */
     private static String setGlobalIncome(String a, String b) {
         String[] parts = a.split(";", -1);
-        if (parts.length != 3) return "Réglages incomplets.";
+        if (parts.length != 4) return "Réglages incomplets.";
+        String dest = parts[3].trim();
+        if (!dest.equals("gang") && !dest.equals("chef")) return "Destination du revenu : gang ou chef.";
         long zone, cap, minutes;
         try {
             zone = Long.parseLong(parts[0].trim());
@@ -226,6 +252,7 @@ public final class GangGui {
         GangConfig.setIncomeCapEuros(cap);
         GangConfig.setIncomeIntervalMinutes(minutes);
         GangConfig.setIncomeNeedsOnline("1".equals(b));
+        GangConfig.setIncomeToGang(dest.equals("gang"));
         return null;
     }
 

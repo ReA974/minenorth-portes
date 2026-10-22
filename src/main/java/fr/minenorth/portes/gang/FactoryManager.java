@@ -57,15 +57,19 @@ public final class FactoryManager {
     }
 
     /** Enregistre la fabrique qui vient d'être posée. Faux (et le bloc est retiré) si les conditions ne sont plus réunies. */
-    public static boolean register(ServerPlayer p, String dim, BlockPos pos) {
-        if (placementError(p, dim, pos) != null) return false;
+    public static boolean register(ServerPlayer p, String dim, BlockPos pos) { return registerError(p, dim, pos) == null; }
+
+    /** Enregistre la fabrique posée ; renvoie la raison du refus (en français) ou null si c'est fait. */
+    public static String registerError(ServerPlayer p, String dim, BlockPos pos) {
+        String why = placementError(p, dim, pos);
+        if (why != null) return why;
         GangData data = GangData.get(p.server);
         Gang g = data.gangOf(p.getUUID());
         data.addFactory(new Factory(dim, pos.asLong(), g.id));
         g.addLog(p.getUUID(), "pose une fabrique d'armes", GangConfig.logMax());
         data.setDirty();
         GangService.notifyGang(p.server, g, "§6Fabrique d'armes installée dans la zone. Clic droit dessus pour lancer des fabrications.");
-        return true;
+        return null;
     }
 
     /** Le bloc a disparu (cassé, explosion…) : son stock tombe au sol, la fabrique est effacée. */
@@ -142,7 +146,10 @@ public final class FactoryManager {
         i.zone = t == null ? "(hors zone)" : t.name;
         i.mine = me != null && me.id.equals(f.gang);
         i.running = enabled && held && !f.queue.isEmpty();
-        i.canQueue = i.mine && rank.atLeast(GangRank.LIEUTENANT) && enabled && held;
+        i.canSpend = i.mine && GangService.canSpend(me, p.getUUID());
+        i.balance = i.mine ? me.balance() : 0;
+        i.spendRank = me == null ? "" : GangService.spendRule(me);
+        i.canQueue = i.canSpend && enabled && held;
         i.canCollect = i.mine && rank.atLeast(GangConfig.factoryCollectRank());
         Gang holder = t == null ? null : data.gang(t.holder());
         i.canSeize = !i.mine && me != null && holder != null && holder.id.equals(me.id) && rank.atLeast(GangRank.LIEUTENANT)
@@ -156,7 +163,8 @@ public final class FactoryManager {
         else i.status = "En fabrication.";
         for (Factory.Job j : f.queue) i.queue.add(new GangView.JobInfo(j.label, j.qty, j.totalSeconds, j.remaining));
         for (Factory.Lot l : f.stock) i.stock.add(new GangView.LotInfo(l.label(), l.qty()));
-        for (FactoryRecipe r : GangConfig.recipes()) i.recipes.add(new GangView.Recipe(r.label(), "", r.qty(), r.seconds(), r.cents()));
+        for (FactoryRecipe r : GangConfig.recipes()) i.recipes.add(new GangView.Recipe(r.label(), "", r.qty(), r.seconds(), r.cents(), r.needs()));
+        for (FactoryMaterial m : GangConfig.materials()) i.materials.add(new GangView.MatInfo(m.id(), m.label(), f.materials.getOrDefault(m.id(), 0), GangConfig.materialCap(), m.pack(), m.cents()));
         return i;
     }
 
@@ -176,6 +184,7 @@ public final class FactoryManager {
         switch (action) {
             case GangGui.FACTORY_QUEUE -> { err = queue(p, pos, a, b); ok = "Fabrication lancée."; }
             case GangGui.FACTORY_CANCEL -> { err = cancel(p, pos, a); ok = "Fabrication annulée."; }
+            case GangGui.FACTORY_BUY -> { err = buy(p, pos, a, b); ok = "Achat effectué : la réserve de la fabrique est à jour."; }
             case GangGui.FACTORY_COLLECT -> { err = collect(p, pos); ok = null; if (err == null) return; }
             case GangGui.FACTORY_SEIZE -> { err = seize(p, pos); ok = "Fabrique saisie : elle est à vous."; }
             case GangGui.FACTORY_VIEW -> { err = resolve(p, pos) == null ? "Approchez-vous de la fabrique." : null; ok = null; if (err != null) return; }
@@ -188,13 +197,18 @@ public final class FactoryManager {
         try { return Integer.parseInt(s.trim()); } catch (RuntimeException e) { return -1; }
     }
 
+    private static String materialLabel(String id) {
+        for (FactoryMaterial m : GangConfig.materials()) if (m.id().equals(id)) return m.label();
+        return id;
+    }
+
     static String queue(ServerPlayer p, long pos, String indexText, String label) {
         Factory f = resolve(p, pos);
         if (f == null) return "Approchez-vous de la fabrique.";
         GangData data = GangData.get(p.server);
         Gang me = data.gangOf(p.getUUID());
         if (me == null || !me.id.equals(f.gang)) return "Cette fabrique n'est pas à votre gang.";
-        if (!me.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT)) return "Seuls le chef et les lieutenants lancent une fabrication.";
+        if (!GangService.canSpend(me, p.getUUID())) return "Le chef n'autorise que " + GangService.spendRule(me) + " à lancer une fabrication (elle utilise l'argent du gang).";
         if (!GangConfig.factoryEnabled()) return "La fabrication est désactivée.";
         Territory t = zoneAt(data, f.dim, BlockPos.of(f.pos));
         if (t == null || !f.gang.equals(t.holder())) return "La zone n'est plus tenue par votre gang : la fabrique est arrêtée.";
@@ -207,14 +221,48 @@ public final class FactoryManager {
         if (bad != null) return bad;
         if (f.queue.size() >= GangConfig.factoryQueueMax()) return "La file est pleine (" + GangConfig.factoryQueueMax() + " fabrications).";
         if (f.stock.size() + f.queue.size() >= GangConfig.factoryStockMax()) return "Stock plein (" + GangConfig.factoryStockMax() + " lots) : récupérez d'abord ce qui est prêt.";
-        UUID chef = me.chef();
-        if (r.cents() > 0) {
-            if (chef == null) return "Le gang n'a pas de chef pour payer.";
-            PayResult res = MineNorth.bank().debit(p.server, chef, r.cents(), "gang:fabrique", false);
-            if (!res.ok()) return "Le compte du chef ne peut pas payer " + GangService.money(r.cents()) + " (" + res.message().replace(".", "") + ").";
+        java.util.Map<String, Integer> needs = FactoryRecipe.parseNeeds(r.needs());
+        if (needs == null) return "Cette recette est mal réglée (besoins illisibles) : prévenez un administrateur.";
+        // 1) matières en réserve dans la fabrique ; 2) argent du gang (le tout avant de rien consommer)
+        for (var n : needs.entrySet()) {
+            int have = f.materials.getOrDefault(n.getKey(), 0);
+            if (have < n.getValue()) return "Il manque de la matière « " + materialLabel(n.getKey()) + " » : " + have + "/" + n.getValue() + ". Achetez-en dans l'onglet Achats.";
         }
-        f.queue.add(new Factory.Job(r.label(), r.spec(), r.qty(), r.seconds(), r.seconds(), r.cents()));
-        me.addLog(p.getUUID(), "lance la fabrication de " + r.label() + " (" + GangService.money(r.cents()) + ")", GangConfig.logMax());
+        String err = GangService.spend(p.server, me, p.getUUID(), r.cents(), "Fabrication : " + r.label(), "gang:fabrique");
+        if (err != null) return err;
+        for (var n : needs.entrySet()) {
+            int left = f.materials.getOrDefault(n.getKey(), 0) - n.getValue();
+            if (left > 0) f.materials.put(n.getKey(), left); else f.materials.remove(n.getKey());
+        }
+        f.queue.add(new Factory.Job(r.label(), r.spec(), r.qty(), r.seconds(), r.seconds(), r.cents(), r.needs()));
+        me.addLog(p.getUUID(), "lance la fabrication de " + r.label() + (r.cents() > 0 ? " (" + GangService.money(r.cents()) + ")" : ""), GangConfig.logMax());
+        data.setDirty();
+        return null;
+    }
+
+    /** Achat de matières premières avec l'argent du compte du gang (grade autorisé par le chef seulement). */
+    static String buy(ServerPlayer p, long pos, String materialId, String packsText) {
+        Factory f = resolve(p, pos);
+        if (f == null) return "Approchez-vous de la fabrique.";
+        GangData data = GangData.get(p.server);
+        Gang me = data.gangOf(p.getUUID());
+        if (me == null || !me.id.equals(f.gang)) return "Cette fabrique n'est pas à votre gang.";
+        if (!GangService.canSpend(me, p.getUUID())) return "Le chef n'autorise que " + GangService.spendRule(me) + " à dépenser l'argent du gang.";
+        if (!GangConfig.factoryEnabled()) return "La fabrique est désactivée.";
+        FactoryMaterial mat = null;
+        for (FactoryMaterial m : GangConfig.materials()) if (m.id().equals(materialId)) mat = m;
+        if (mat == null) return "Cette matière n'est plus vendue : rouvrez la fabrique.";
+        int packs = parseInt(packsText);
+        if (packs < 1 || packs > 10) return "Quantité d'achats : 1 à 10.";
+        long add = (long) mat.pack() * packs;
+        int have = f.materials.getOrDefault(mat.id(), 0);
+        if (have + add > GangConfig.materialCap()) return "Réserve pleine pour « " + mat.label() + " » (" + have + "/" + GangConfig.materialCap() + ").";
+        if (!GangService.allow(p.getUUID(), "fabrique-buy", 500)) return "Doucement.";
+        long cost = mat.cents() * packs;
+        String err = GangService.spend(p.server, me, p.getUUID(), cost, "Achat : " + add + " x " + mat.label(), "gang:fabrique");
+        if (err != null) return err;
+        f.materials.put(mat.id(), (int) (have + add));
+        me.addLog(p.getUUID(), "achète " + add + " x " + mat.label() + " (" + GangService.money(cost) + ")", GangConfig.logMax());
         data.setDirty();
         return null;
     }
@@ -224,15 +272,19 @@ public final class FactoryManager {
         if (f == null) return "Approchez-vous de la fabrique.";
         GangData data = GangData.get(p.server);
         Gang me = data.gangOf(p.getUUID());
-        if (me == null || !me.id.equals(f.gang) || !me.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT)) return "Seuls le chef et les lieutenants du gang annulent une fabrication.";
+        if (me == null || !me.id.equals(f.gang) || !GangService.canSpend(me, p.getUUID())) return "Seuls ceux qui peuvent dépenser l'argent du gang annulent une fabrication.";
         int idx = parseInt(jobText);
         if (idx < 0 || idx >= f.queue.size()) return "Cette fabrication n'existe plus.";
         Factory.Job j = f.queue.get(idx);
         boolean untouched = j.remaining >= j.totalSeconds;
         f.queue.remove(idx);
         String msg = "Fabrication annulée.";
-        if (untouched && j.cents > 0 && me.chef() != null && MineNorth.bank().refund(p.server, me.chef(), j.cents, "gang:fabrique")) {
-            msg = "Fabrication annulée : " + GangService.money(j.cents) + " rendus au compte du chef.";
+        if (untouched) {
+            // Pas commencée : matières et argent reviennent à la fabrique et au compte du gang.
+            java.util.Map<String, Integer> needs = FactoryRecipe.parseNeeds(j.needs);
+            if (needs != null) for (var n : needs.entrySet()) f.materials.merge(n.getKey(), n.getValue(), Integer::sum);
+            if (j.cents > 0) GangService.refundToGang(p.server, me, j.cents, p.getUUID(), "Fabrication annulée : " + j.label, "gang:fabrique");
+            msg = "Fabrication annulée : matières et argent rendus au gang.";
         }
         me.addLog(p.getUUID(), "annule la fabrication de " + j.label, GangConfig.logMax());
         data.setDirty();
@@ -295,13 +347,13 @@ public final class FactoryManager {
 
     // ------------------------------------------------------------------ réglages en jeu (OP)
 
-    /** a = « actif;maxParGang;stockMax;fileMax;gradeRécupération » (actif : 1/0). Tout est vérifié avant d'appliquer. */
+    /** a = « actif;maxParGang;stockMax;fileMax;gradeRécupération;réserveMaxParMatière ». Tout est vérifié avant d'appliquer. */
     public static String adminGlobal(String a) {
         String[] p = a.split(";", -1);
-        if (p.length != 5) return "Réglages incomplets.";
-        long max, stock, queue;
+        if (p.length != 6) return "Réglages incomplets.";
+        long max, stock, queue, mat;
         try {
-            max = Long.parseLong(p[1].trim()); stock = Long.parseLong(p[2].trim()); queue = Long.parseLong(p[3].trim());
+            max = Long.parseLong(p[1].trim()); stock = Long.parseLong(p[2].trim()); queue = Long.parseLong(p[3].trim()); mat = Long.parseLong(p[5].trim());
         } catch (NumberFormatException e) {
             return "Entrez des nombres entiers.";
         }
@@ -310,20 +362,22 @@ public final class FactoryManager {
         if (max < 1 || max > 10) return "Fabriques par gang : 1 à 10.";
         if (stock < 1 || stock > 100) return "Stock maximum : 1 à 100 lots.";
         if (queue < 1 || queue > 20) return "File d'attente : 1 à 20.";
+        if (mat < 1 || mat > 100_000) return "Réserve par matière : 1 à 100 000.";
         GangConfig.setFactoryEnabled("1".equals(p[0].trim()));
         GangConfig.setFactoryMaxPerGang(max);
         GangConfig.setFactoryStockMax(stock);
         GangConfig.setFactoryQueueMax(queue);
         GangConfig.setFactoryCollectRank(rank);
+        GangConfig.setMaterialCap(mat);
         return null;
     }
 
-    /** a = numéro de recette (-1 = nouvelle), b = « Libellé | objet | quantité | secondes | euros ». */
+    /** a = numéro de recette (-1 = nouvelle), b = « Libellé | objet | quantité | secondes | euros | besoins ». */
     public static String adminRecipe(String a, String b) {
         int idx;
         try { idx = Integer.parseInt(a.trim()); } catch (NumberFormatException e) { return "Recette inconnue."; }
         String[] f = b.split("\\|", -1);
-        if (f.length != 5) return "Format : Libellé | objet | quantité | secondes | euros.";
+        if (f.length != 6) return "Format : Libellé | objet | quantité | secondes | euros | besoins.";
         long qty, sec, cents;
         try {
             qty = Long.parseLong(f[2].trim());
@@ -333,12 +387,16 @@ public final class FactoryManager {
             return "Quantité et durée : des nombres entiers.";
         }
         if (cents < 0) return "Prix invalide : un nombre d'euros positif (ex. 25 ou 12,50), 100 000 € au plus.";
-        String err = FactoryRecipe.check(f[0], f[1], qty, sec, cents);
+        String needs = f[5].trim();
+        String err = FactoryRecipe.check(f[0], f[1], qty, sec, cents, needs);
         if (err != null) return err;
         err = FactoryItems.validate(f[1].trim());
         if (err != null) return err;
+        java.util.Set<String> known = new java.util.HashSet<>();
+        for (FactoryMaterial m : GangConfig.materials()) known.add(m.id());
+        for (String id : FactoryRecipe.parseNeeds(needs).keySet()) if (!known.contains(id)) return "Matière inconnue : « " + id + " » (créez-la dans l'onglet Matières).";
         List<FactoryRecipe> list = new ArrayList<>(GangConfig.recipes());
-        FactoryRecipe r = new FactoryRecipe(f[0].trim(), f[1].trim(), (int) qty, (int) sec, cents);
+        FactoryRecipe r = new FactoryRecipe(f[0].trim(), f[1].trim(), (int) qty, (int) sec, cents, needs);
         if (idx == -1) {
             if (list.size() >= RECIPES_MAX) return "Trop de recettes (" + RECIPES_MAX + " au plus).";
             for (FactoryRecipe o : list) if (o.label().equalsIgnoreCase(r.label())) return "Une recette porte déjà ce libellé.";
@@ -359,6 +417,54 @@ public final class FactoryManager {
         if (idx < 0 || idx >= list.size()) return "Recette inconnue.";
         list.remove(idx);
         GangConfig.setRecipes(list);
+        return null;
+    }
+
+    /** a = numéro de matière (-1 = nouvelle), b = « Libellé | identifiant | quantité par achat | euros ». */
+    public static String adminMaterial(String a, String b) {
+        int idx;
+        try { idx = Integer.parseInt(a.trim()); } catch (NumberFormatException e) { return "Matière inconnue."; }
+        String[] f = b.split("\\|", -1);
+        if (f.length != 4) return "Format : Libellé | identifiant | quantité par achat | euros.";
+        long pack, cents;
+        try {
+            pack = Long.parseLong(f[2].trim());
+            cents = GangRules.parseEuros(f[3], FactoryMaterial.CENTS_MAX);
+        } catch (NumberFormatException e) {
+            return "Quantité : un nombre entier.";
+        }
+        if (cents < 0) return "Prix invalide : un nombre d'euros positif (ex. 30 ou 12,50).";
+        String err = FactoryMaterial.check(f[0], f[1], pack, cents);
+        if (err != null) return err;
+        List<FactoryMaterial> list = new ArrayList<>(GangConfig.materials());
+        FactoryMaterial m = new FactoryMaterial(f[0].trim(), f[1].trim(), (int) pack, cents);
+        if (idx == -1) {
+            if (list.size() >= 20) return "Trop de matières (20 au plus).";
+            for (FactoryMaterial o : list) if (o.id().equals(m.id()) || o.label().equalsIgnoreCase(m.label())) return "Une matière porte déjà ce libellé ou cet identifiant.";
+            list.add(m);
+        } else {
+            if (idx < 0 || idx >= list.size()) return "Matière inconnue.";
+            FactoryMaterial old = list.get(idx);
+            for (int i = 0; i < list.size(); i++) if (i != idx && (list.get(i).id().equals(m.id()) || list.get(i).label().equalsIgnoreCase(m.label()))) return "Une matière porte déjà ce libellé ou cet identifiant.";
+            if (!old.id().equals(m.id())) return "L'identifiant d'une matière ne change pas (des recettes et des réserves l'utilisent) : créez-en une nouvelle.";
+            list.set(idx, m);
+        }
+        GangConfig.setMaterials(list);
+        return null;
+    }
+
+    public static String adminMaterialDelete(String a) {
+        int idx;
+        try { idx = Integer.parseInt(a.trim()); } catch (NumberFormatException e) { return "Matière inconnue."; }
+        List<FactoryMaterial> list = new ArrayList<>(GangConfig.materials());
+        if (idx < 0 || idx >= list.size()) return "Matière inconnue.";
+        String id = list.get(idx).id();
+        for (FactoryRecipe r : GangConfig.recipes()) {
+            var needs = FactoryRecipe.parseNeeds(r.needs());
+            if (needs != null && needs.containsKey(id)) return "La recette « " + r.label() + " » utilise cette matière : modifiez-la d'abord.";
+        }
+        list.remove(idx);
+        GangConfig.setMaterials(list);
         return null;
     }
 

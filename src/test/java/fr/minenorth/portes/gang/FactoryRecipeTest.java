@@ -16,6 +16,7 @@ class FactoryRecipeTest {
         assertEquals(30, r.qty());
         assertEquals(90, r.seconds());
         assertEquals(2500, r.cents());
+        assertEquals("", r.needs());
         assertEquals(r, FactoryRecipe.parse(r.format()));
     }
 
@@ -45,5 +46,35 @@ class FactoryRecipeTest {
         List<FactoryRecipe> l = FactoryRecipe.parseAll(List.of("Ok | minecraft:stone | 1 | 10 | 5", "cassée", "Aussi | minecraft:dirt | 2 | 20 | 0"));
         assertEquals(2, l.size());
         assertEquals("Aussi", l.get(1).label());
+    }
+
+    @Test
+    void besoinsEnMatieres() {
+        FactoryRecipe r = FactoryRecipe.parse("Glock | tacz:modern_kinetic_gun{GunId:'tacz:glock_17'} | 1 | 600 | 100 | acier:5;poudre:1");
+        assertNotNull(r);
+        assertEquals(java.util.Map.of("acier", 5, "poudre", 1), FactoryRecipe.parseNeeds(r.needs()));
+        assertEquals(r, FactoryRecipe.parse(r.format()));
+        assertTrue(FactoryRecipe.parseNeeds("").isEmpty());
+        assertNull(FactoryRecipe.parseNeeds("Acier:5"));          // identifiant en minuscules seulement
+        assertNull(FactoryRecipe.parseNeeds("acier:0"));
+        assertNull(FactoryRecipe.parseNeeds("acier:5;;"));
+        assertNull(FactoryRecipe.parseNeeds("a:1;b:1;c:1;d:1;e:1;f:1;g:1")); // 6 matières au plus
+        assertNull(FactoryRecipe.parse("Ok | minecraft:stone | 1 | 10 | 5 | n'importe quoi"));
+        assertEquals(java.util.Map.of("acier", 7), FactoryRecipe.parseNeeds("acier:3;acier:4")); // cumul
+    }
+
+    @Test
+    void matieres() {
+        FactoryMaterial m = FactoryMaterial.parse("Acier | acier | 10 | 60");
+        assertNotNull(m);
+        assertEquals("acier", m.id());
+        assertEquals(10, m.pack());
+        assertEquals(6000, m.cents());
+        assertEquals(m, FactoryMaterial.parse(m.format()));
+        assertNull(FactoryMaterial.parse("A | acier | 10 | 60"));            // libellé trop court
+        assertNull(FactoryMaterial.parse("Acier | Acier | 10 | 60"));        // identifiant en minuscules
+        assertNull(FactoryMaterial.parse("Acier | acier | 0 | 60"));
+        assertNull(FactoryMaterial.parse("Acier | acier | 10 | -1"));
+        assertEquals(2, FactoryMaterial.parseAll(java.util.List.of("Acier | acier | 10 | 60", "Acier bis | acier | 5 | 10", "Laiton | laiton | 20 | 30")).size()); // identifiant unique
     }
 }

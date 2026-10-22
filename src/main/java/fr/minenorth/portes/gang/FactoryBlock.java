@@ -55,7 +55,10 @@ public class FactoryBlock extends HorizontalDirectionalBlock {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (level.isClientSide || !(placer instanceof ServerPlayer sp)) return;
         // Les conditions ont été contrôlées avant la pose (GangEvents) ; on enregistre, et on annule tout si l'état a changé entre-temps.
-        if (!FactoryManager.register(sp, level.dimension().location().toString(), pos)) {
+        String why = FactoryManager.registerError(sp, level.dimension().location().toString(), pos);
+        if (why != null) {
+            // Ne doit pas arriver (la pose est déjà contrôlée avant) : on explique clairement plutôt que de retirer le bloc en silence.
+            GangEvents.refuse(sp, why, "Pose de la Fabrique d'armes");
             level.removeBlock(pos, false);
             ItemStack back = new ItemStack(this);
             if (!sp.getInventory().add(back)) sp.drop(back, false);

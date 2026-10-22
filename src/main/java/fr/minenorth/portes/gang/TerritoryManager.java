@@ -176,8 +176,19 @@ public final class TerritoryManager {
             if (GangConfig.incomeNeedsOnline() && g.members.keySet().stream().noneMatch(m -> s.getPlayerList().getPlayer(m) != null)) continue;
             if (now - g.incomeWindowStart >= 3_600_000L) { g.incomeWindowStart = now; g.incomePaid = 0; }
             long pay = GangRules.cappedPayout(en.getValue(), g.incomePaid, GangConfig.incomeCapPerHour());
+            if (pay <= 0) continue;
+            if (GangConfig.incomeToGang()) {
+                // Compte du gang (solde propre, géré ici) : l'argent est pris au trésor, comme avant, mais atterrit sur le compte du gang.
+                MineNorth.treasury().collect(s, -pay, "gang:revenu");
+                GangService.credit(s, g, pay, null, "Revenus des territoires");
+                g.incomePaid += pay;
+                data.setDirty();
+                GangService.notifyGang(s, g, "§aVos territoires ont rapporté §f" + GangService.money(pay) + " §aau compte du gang.");
+                continue;
+            }
+            // Ancien fonctionnement (revenu_destination = chef) : compte bancaire personnel du chef.
             UUID chef = g.chef();
-            if (pay <= 0 || chef == null || !MineNorth.bank().hasAccount(s, chef)) continue;
+            if (chef == null || !MineNorth.bank().hasAccount(s, chef)) continue;
             if (!MineNorth.bank().refund(s, chef, pay, "gang:territoire")) continue;
             g.incomePaid += pay;
             data.setDirty();

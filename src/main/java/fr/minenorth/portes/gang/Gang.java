@@ -12,6 +12,11 @@ public final class Gang {
     /** Ligne du journal du gang : quand, qui (UUID), quoi. */
     public record LogEntry(long timeMs, UUID actor, String text) {}
 
+    /** Mouvement du compte : quand, qui (UUID, null = automatique), montant (+ dépôt / - dépense), libellé. */
+    public record Tx(long timeMs, UUID actor, long delta, String label) {}
+
+    public static final int TX_MAX = 100;
+
     public final UUID id;
     String name;
     String tag;
@@ -25,6 +30,10 @@ public final class Gang {
     boolean hasBase;
     /** Objets de l'ancien coffre commun (supprimé) : remis au chef dès qu'il se connecte, puis effacés d'ici. */
     final List<ItemStack> legacyItems = new ArrayList<>();
+    /** Compte du gang : solde en centimes (géré côté serveur), historique, et grade minimum autorisé à dépenser (0 chef, 1 lieutenant). */
+    long balance;
+    int spendRank = GangRank.LIEUTENANT.level();
+    final List<Tx> txs = new ArrayList<>();
     /** Début de l'heure en cours pour le plafond de revenu, et somme déjà versée dans cette heure. */
     long incomeWindowStart;
     long incomePaid;
@@ -42,6 +51,14 @@ public final class Gang {
     public boolean isMember(UUID player) { return player != null && members.containsKey(player); }
     public List<LogEntry> log() { return Collections.unmodifiableList(log); }
     public boolean hasBase() { return hasBase; }
+    public long balance() { return balance; }
+    public GangRank spendRank() { return GangRank.ofLevel(spendRank); }
+    public List<Tx> txs() { return Collections.unmodifiableList(txs); }
+
+    void addTx(UUID actor, long delta, String label) {
+        txs.add(new Tx(System.currentTimeMillis(), actor, delta, label));
+        while (txs.size() > TX_MAX) txs.remove(0);
+    }
     public String baseDim() { return baseDim; }
     public long basePos() { return basePos; }
 
@@ -88,6 +105,15 @@ public final class Gang {
             for (ItemStack st : legacyItems) il.add(st.save(new CompoundTag()));
             t.put("Legacy", il);
         }
+        t.putLong("Balance", balance);
+        t.putInt("SpendRank", spendRank);
+        ListTag tl = new ListTag();
+        for (Tx x : txs) {
+            CompoundTag c = new CompoundTag();
+            c.putLong("Time", x.timeMs()); if (x.actor() != null) c.putUUID("Actor", x.actor()); c.putLong("Delta", x.delta()); c.putString("Label", x.label());
+            tl.add(c);
+        }
+        t.put("Tx", tl);
         t.putLong("IncomeStart", incomeWindowStart);
         t.putLong("IncomePaid", incomePaid);
         return t;
@@ -114,6 +140,13 @@ public final class Gang {
                 ItemStack st = ItemStack.of(il.getCompound(i));
                 if (!st.isEmpty()) g.legacyItems.add(st);
             }
+        }
+        g.balance = Math.max(0, t.getLong("Balance"));
+        g.spendRank = t.contains("SpendRank") ? Math.max(0, Math.min(1, t.getInt("SpendRank"))) : GangRank.LIEUTENANT.level();
+        ListTag tl = t.getList("Tx", Tag.TAG_COMPOUND);
+        for (int i = 0; i < tl.size(); i++) {
+            CompoundTag c = tl.getCompound(i);
+            g.txs.add(new Tx(c.getLong("Time"), c.hasUUID("Actor") ? c.getUUID("Actor") : null, c.getLong("Delta"), c.getString("Label")));
         }
         g.incomeWindowStart = t.getLong("IncomeStart");
         g.incomePaid = t.getLong("IncomePaid");
