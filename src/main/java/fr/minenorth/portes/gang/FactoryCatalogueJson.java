@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Format JSON du catalogue de la Fabrique d'armes (fichier config/Minenorth-portes/fabrique_catalogue.json, écrit par le mod, relu automatiquement).
+ * Format JSON du catalogue de la Fabrique d'armes (fichier config/Minenorth-gangs/fabrique_catalogue.json, écrit par le mod, relu automatiquement).
  * Logique pure (sans Minecraft) : testée à part. Une entrée illisible ou invalide est ignorée, jamais fatale.
  */
 public final class FactoryCatalogueJson {

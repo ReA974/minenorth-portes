@@ -1,6 +1,5 @@
 package fr.minenorth.portes.gang;
 
-import fr.minenorth.portes.config.SystemeConfigFiles;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Réglages des gangs : config/Minenorth-portes/minenorth_gangs.toml (créé au premier lancement, relu par /gang recharger (OP)).
+ * Réglages des gangs : config/Minenorth-gangs/minenorth_gangs.toml (créé au premier lancement, relu par /gang recharger (OP)).
  * Les prix sont écrits en EUROS dans le fichier (convertis en centimes ici). Valeurs hors limites : ramenées dans une plage raisonnable.
  */
 public final class GangConfig {
@@ -79,7 +78,7 @@ public final class GangConfig {
         return List.of("Acier | acier | 10 | 60", "Laiton | laiton | 20 | 30", "Poudre | poudre | 20 | 40");
     }
 
-    private static Path file() { return SystemeConfigFiles.getRoot().resolve("minenorth_gangs.toml"); }
+    private static Path file() { return GangPaths.file("minenorth_gangs.toml"); }
 
     public static synchronized void load() {
         VALUES.clear();

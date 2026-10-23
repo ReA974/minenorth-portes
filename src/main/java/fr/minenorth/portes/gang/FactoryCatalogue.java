@@ -1,7 +1,6 @@
 package fr.minenorth.portes.gang;
 
 import com.mojang.logging.LogUtils;
-import fr.minenorth.portes.config.SystemeConfigFiles;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -13,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Catalogue de la Fabrique d'armes, stocké dans config/Minenorth-portes/fabrique_catalogue.json : écrit par le mod (panneau admin), relu tout seul
+ * Catalogue de la Fabrique d'armes, stocké dans config/Minenorth-gangs/fabrique_catalogue.json : écrit par le mod (panneau admin), relu tout seul
  * quand le fichier change (vérification au plus toutes les 2 s). Un fichier illisible n'efface rien : on garde le dernier catalogue valide.
  * Au premier lancement, le catalogue est créé à partir des anciennes recettes de minenorth_gangs.toml (migration).
  */
@@ -25,7 +24,7 @@ public final class FactoryCatalogue {
     private static long stamp = -1;
     private static long lastCheck;
 
-    public static Path file() { return SystemeConfigFiles.getRoot().resolve("fabrique_catalogue.json"); }
+    public static Path file() { return GangPaths.file("fabrique_catalogue.json"); }
 
     public static synchronized List<FactoryRecipe> all() {
         poll(false);
