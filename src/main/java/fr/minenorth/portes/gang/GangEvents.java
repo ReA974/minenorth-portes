@@ -56,6 +56,22 @@ public final class GangEvents {
         }
     }
 
+    /** Pose (objet en main) et démontage (accroupi, main vide) de la fabrique, pris en premier : aucun autre mod ne voit le clic. */
+    @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = true)
+    public static void onUse(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock e) {
+        if (e.getLevel().isClientSide() || e.getHand() != net.minecraft.world.InteractionHand.MAIN_HAND) return;
+        if (!(e.getEntity() instanceof ServerPlayer p)) return;
+        if (e.getItemStack().getItem() instanceof FactoryItem) {
+            e.setCanceled(true);
+            e.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            if (GangService.allow(p.getUUID(), "fabrique_pose", 300)) FactoryManager.placeFromUse(p, e.getPos(), e.getFace());
+        } else if (p.isShiftKeyDown() && e.getItemStack().isEmpty() && p.level().getBlockState(e.getPos()).getBlock() instanceof FactoryBlock) {
+            e.setCanceled(true);
+            e.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            if (GangService.allow(p.getUUID(), "fabrique_demonte", 300)) FactoryManager.dismantleFromUse(p, e.getPos());
+        }
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onBreak(BlockEvent.BreakEvent e) {
         Block b = e.getState().getBlock();

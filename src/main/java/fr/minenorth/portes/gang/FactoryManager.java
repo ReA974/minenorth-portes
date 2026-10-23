@@ -47,6 +47,7 @@ public final class FactoryManager {
         Territory t = zoneAt(data, dim, pos);
         if (t == null) return "La fabrique se pose dans une zone (territoire) que votre gang contrôle.";
         if (!g.id.equals(t.holder())) return "Votre gang doit CONTRÔLER la zone « " + t.name + " » pour y poser une fabrique.";
+        purgeGhosts(p.server, data, g);
         List<Factory> mine = data.factoriesOf(g.id);
         if (mine.size() >= GangConfig.factoryMaxPerGang()) return "Votre gang a déjà " + GangConfig.factoryMaxPerGang() + " fabrique(s).";
         for (Factory f : mine) {
@@ -54,6 +55,80 @@ public final class FactoryManager {
                 return "Votre gang a déjà une fabrique dans la zone « " + t.name + " ».";
         }
         return null;
+    }
+
+    private static final org.slf4j.Logger LOG = com.mojang.logging.LogUtils.getLogger();
+
+    /**
+     * Efface les fabriques « fantômes » du gang : enregistrées mais dont le bloc n'existe plus (pose annulée après coup par un autre mod comme
+     * WorldGuard, bloc retiré par commande, monde restauré…). Sans cela, elles comptent dans la limite et bloquent toute nouvelle pose.
+     */
+    static void purgeGhosts(MinecraftServer s, GangData data, Gang g) {
+        for (Factory f : new ArrayList<>(data.factoriesOf(g.id))) {
+            ServerLevel l = levelOf(s, f.dim);
+            if (l == null) continue;
+            BlockPos bp = BlockPos.of(f.pos);
+            if (l.getBlockState(bp).getBlock() instanceof FactoryBlock) continue;
+            LOG.warn("[Gangs/fabrique] fabrique fantome effacee ({} {}) : le bloc n'existe plus, gang {}", f.dim, bp, g.name);
+            dropStock(l, f);
+            data.removeFactory(f);
+            data.setDirty();
+        }
+    }
+
+    /**
+     * Pose par clic droit (objet simple, sans évènement de pose : WorldGuard ne voit rien). Renvoie true si le clic est traité.
+     * Les règles du gang sont contrôlées, puis le bloc est posé directement.
+     */
+    public static void placeFromUse(ServerPlayer p, BlockPos clicked, net.minecraft.core.Direction face) {
+        ServerLevel level = p.serverLevel();
+        String dim = level.dimension().location().toString();
+        BlockPos pos = level.getBlockState(clicked).canBeReplaced() ? clicked : clicked.relative(face);
+        String what = "Pose de la Fabrique d'armes";
+        String why = null;
+        if (p.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > 64.0) why = "Trop loin.";
+        else if (!level.isLoaded(pos) || level.isOutsideBuildHeight(pos)) why = "Impossible ici.";
+        else if (!level.getBlockState(pos).canBeReplaced()) why = "Il n'y a pas la place ici.";
+        else if (!level.isUnobstructed(GangBlocks.FACTORY.get().defaultBlockState(), pos, net.minecraft.world.phys.shapes.CollisionContext.empty())) why = "Quelqu'un ou quelque chose gêne à cet endroit.";
+        if (why == null) why = placementError(p, dim, pos);
+        if (why != null) {
+            LOG.info("[Gangs/fabrique] pose refusee pour {} en {} : {}", p.getGameProfile().getName(), pos, why);
+            GangEvents.refuse(p, why, what);
+            return;
+        }
+        BlockState st = GangBlocks.FACTORY.get().defaultBlockState()
+                .setValue(FactoryBlock.FACING, p.getDirection().getOpposite()).setValue(FactoryBlock.LIT, false);
+        level.setBlock(pos, st, 3);
+        if (!(level.getBlockState(pos).getBlock() instanceof FactoryBlock)) {
+            LOG.warn("[Gangs/fabrique] le bloc n'a pas pu etre pose en {} (annule par un autre mod ?)", pos);
+            GangEvents.refuse(p, "le bloc n'a pas pu être posé ici (un autre système l'a annulé).", what);
+            return;
+        }
+        String err = registerError(p, dim, pos);
+        if (err != null) {
+            level.removeBlock(pos, false);
+            GangEvents.refuse(p, err, what);
+            return;
+        }
+        if (!p.getAbilities().instabuild) p.getMainHandItem().shrink(1);
+        level.playSound(null, pos, net.minecraft.sounds.SoundEvents.ANVIL_PLACE, net.minecraft.sounds.SoundSource.BLOCKS, 0.8f, 1.0f);
+        LOG.info("[Gangs/fabrique] fabrique posee par {} en {} {}", p.getGameProfile().getName(), dim, pos);
+    }
+
+    /** Accroupi, main vide, clic droit sur sa fabrique : la démonte et rend l'objet (contourne les protections qui empêchent de casser). */
+    public static void dismantleFromUse(ServerPlayer p, BlockPos pos) {
+        ServerLevel level = p.serverLevel();
+        GangData data = GangData.get(p.server);
+        Factory f = data.factory(level.dimension().location().toString(), pos.asLong());
+        Gang mine = data.gangOf(p.getUUID());
+        if (f == null || mine == null || !mine.id.equals(f.gang()) || !mine.rankOf(p.getUUID()).atLeast(GangRank.LIEUTENANT)) {
+            GangEvents.refuse(p, "seuls le chef et les lieutenants du gang propriétaire peuvent démonter la fabrique.", "Démontage de la Fabrique d'armes");
+            return;
+        }
+        level.removeBlock(pos, false);
+        ItemStack back = new ItemStack(GangBlocks.FACTORY_ITEM.get());
+        if (!p.getInventory().add(back)) p.drop(back, false);
+        LOG.info("[Gangs/fabrique] fabrique demontee par {} en {}", p.getGameProfile().getName(), pos);
     }
 
     /** Enregistre la fabrique qui vient d'être posée. Faux (et le bloc est retiré) si les conditions ne sont plus réunies. */
