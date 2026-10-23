@@ -175,7 +175,7 @@ public final class TerritoryManager {
             if (g == null) continue;
             if (GangConfig.incomeNeedsOnline() && g.members.keySet().stream().noneMatch(m -> s.getPlayerList().getPlayer(m) != null)) continue;
             if (now - g.incomeWindowStart >= 3_600_000L) { g.incomeWindowStart = now; g.incomePaid = 0; }
-            long pay = GangRules.cappedPayout(en.getValue(), g.incomePaid, GangConfig.incomeCapPerHour());
+            long pay = GangRules.cappedPayout(en.getValue() * g.incomePct / 100L, g.incomePaid, GangConfig.incomeCapPerHour());
             if (pay <= 0) continue;
             if (GangConfig.incomeToGang()) {
                 // Compte du gang (solde propre, géré ici) : l'argent est pris au trésor, comme avant, mais atterrit sur le compte du gang.

@@ -57,6 +57,9 @@ public final class GangService {
 
     public static String nameOf(MinecraftServer s, UUID id) { return MineNorth.displayName(s, id); }
 
+    /** Appelé par la gestion admin après un changement de membres : portes recalculées tout de suite. */
+    static void afterMembersChanged(MinecraftServer s) { membershipChanged(s, null); }
+
     private static void membershipChanged(MinecraftServer s, Gang ignored) {
         // Les portes du gang se recalculent tout de suite : un membre exclu ne doit pas rester une seconde de plus.
         ModNetwork.syncDoorLocks(s);

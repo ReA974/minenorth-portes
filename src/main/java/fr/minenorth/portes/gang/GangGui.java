@@ -118,7 +118,7 @@ public final class GangGui {
             v.materialCap = GangConfig.materialCap();
             for (FactoryMaterial m : GangConfig.materials()) v.adminMaterials.add(new GangView.MaterialDef(m.label(), m.id(), m.pack(), m.cents()));
             v.factoryCollectRank = GangConfig.factoryCollectRank().label().toLowerCase(Locale.ROOT);
-            for (FactoryRecipe r : GangConfig.recipes()) v.adminRecipes.add(new GangView.Recipe(r.label(), r.spec(), r.qty(), r.seconds(), r.cents(), r.needs()));
+            for (FactoryRecipe r : GangConfig.recipes()) v.adminRecipes.add(new GangView.Recipe(r.label(), "", r.qty(), r.seconds(), r.cents(), r.needs(), r.enabled(), r.daily(), 0));
         }
         return v;
     }

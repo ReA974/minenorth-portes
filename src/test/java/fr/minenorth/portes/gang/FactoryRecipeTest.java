@@ -35,7 +35,6 @@ class FactoryRecipeTest {
         assertNull(FactoryRecipe.parse("Ok | minecraft:stone | 1 | 1 | 5"));                // durée trop courte
         assertNull(FactoryRecipe.parse("Ok | minecraft:stone | 1 | 10 | -5"));              // prix négatif
         assertNull(FactoryRecipe.parse("Ok | pas un objet | 1 | 10 | 5"));
-        assertNotNull(FactoryRecipe.check("Ok", "tacz:ammo{AmmoId:\"x\"}", 1, 10, 5));    // guillemets interdits (apostrophes)
         assertNotNull(FactoryRecipe.check("Ok", "minecraft:stone", 1, 10, FactoryRecipe.CENTS_MAX + 1));
         assertNotNull(FactoryRecipe.check("A|B", "minecraft:stone", 1, 10, 5));            // barre verticale interdite
         assertNull(FactoryRecipe.check("Ok", "minecraft:stone", 1, 10, 0));

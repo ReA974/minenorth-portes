@@ -17,7 +17,7 @@ public final class GangView {
     public record Invite(String tag, String name, int color, String inviter) {}
     public record GangInfo(String name, String tag, int color, int members) {}
     /** Recette de la fabrique ; spec n'est rempli que pour les OP (édition en jeu). needs = « acier:5;poudre:1 ». */
-    public record Recipe(String label, String spec, int qty, int seconds, long cents, String needs) {}
+    public record Recipe(String label, String spec, int qty, int seconds, long cents, String needs, boolean enabled, int daily, int used) {}
     public record JobInfo(String label, int qty, int total, int remaining) {}
     public record LotInfo(String label, int qty) {}
     /** Matière première d'une fabrique : réserve actuelle et plafond, quantité et prix d'un achat. */
@@ -65,11 +65,12 @@ public final class GangView {
     }
 
     private static void writeRecipe(FriendlyByteBuf x, Recipe r) {
-        x.writeUtf(r.label); x.writeUtf(r.spec, 256); x.writeVarInt(r.qty); x.writeVarInt(r.seconds); x.writeLong(r.cents); x.writeUtf(r.needs, 128);
+        x.writeUtf(r.label); x.writeUtf(r.spec, 2048); x.writeVarInt(r.qty); x.writeVarInt(r.seconds); x.writeLong(r.cents); x.writeUtf(r.needs, 128);
+        x.writeBoolean(r.enabled); x.writeVarInt(r.daily); x.writeVarInt(r.used);
     }
 
     private static Recipe readRecipe(FriendlyByteBuf x) {
-        return new Recipe(x.readUtf(), x.readUtf(256), x.readVarInt(), x.readVarInt(), x.readLong(), x.readUtf(128));
+        return new Recipe(x.readUtf(), x.readUtf(2048), x.readVarInt(), x.readVarInt(), x.readLong(), x.readUtf(128), x.readBoolean(), x.readVarInt(), x.readVarInt());
     }
 
     /** Le client ouvre l'écran (s'il n'a pas déjà un écran ouvert). */

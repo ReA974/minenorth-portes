@@ -9,8 +9,11 @@ import java.util.Locale;
  * avec des apostrophes pour les textes), quantité par lot, durée de fabrication et prix en centimes. Logique pure (sans Minecraft) : testée à part.
  * Ligne du fichier : « Libellé | objet | quantité | secondes | euros | besoins » (besoins facultatif : « acier:5;poudre:1 » = matières consommées, achetées avec l'argent du gang).
  */
-public record FactoryRecipe(String label, String spec, int qty, int seconds, long cents, String needs) {
-    public static final int LABEL_MAX = 32, SPEC_MAX = 220, QTY_MAX = 512, SECONDS_MIN = 5, SECONDS_MAX = 86_400;
+public record FactoryRecipe(String label, String spec, int qty, int seconds, long cents, String needs, boolean enabled, int daily) {
+    /** Recette active, sans limite par jour. */
+    public FactoryRecipe(String label, String spec, int qty, int seconds, long cents, String needs) { this(label, spec, qty, seconds, cents, needs, true, 0); }
+
+    public static final int LABEL_MAX = 32, SPEC_MAX = 1200, QTY_MAX = 512, SECONDS_MIN = 5, SECONDS_MAX = 86_400;
     public static final long CENTS_MAX = 10_000_000L; // 100 000 €
 
     /** Besoins « id:quantité;id:quantité » -> table ordonnée ; null si le texte est invalide (identifiant, quantité 1 à 1000, 6 matières au plus). */
@@ -45,7 +48,7 @@ public record FactoryRecipe(String label, String spec, int qty, int seconds, lon
         if (l.matches(".*[|\"#\\p{Cntrl}].*")) return "Libellé : pas de barre verticale, de guillemet, de # ni de caractère spécial.";
         String s = spec == null ? "" : spec.trim();
         if (s.isEmpty() || s.length() > SPEC_MAX) return "Objet : 1 à " + SPEC_MAX + " caractères (ex. tacz:ammo{AmmoId:'tacz:9mm'}).";
-        if (s.matches(".*[|\"#\\p{Cntrl}].*")) return "Objet : utilisez des apostrophes (') pour les textes, jamais de guillemets, de | ni de #.";
+        if (s.matches(".*[|\\p{Cntrl}].*")) return "Objet : pas de barre verticale (|) ni de caractère de contrôle.";
         if (!s.matches("[a-z0-9_.-]+:[a-z0-9_./-]+(\\{.*})?")) return "Objet : « modid:objet » éventuellement suivi de {données}.";
         if (qty < 1 || qty > QTY_MAX) return "Quantité par lot : 1 à " + QTY_MAX + ".";
         if (seconds < SECONDS_MIN || seconds > SECONDS_MAX) return "Durée : " + SECONDS_MIN + " à " + SECONDS_MAX + " secondes.";

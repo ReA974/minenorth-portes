@@ -122,14 +122,15 @@ public class FactoryScreen extends Screen {
             int ry = y + 14 + row * rowH;
             boolean mats = hasMaterials(fi, r.needs());
             boolean money = fi.balance >= r.cents();
-            cards.add(new int[]{x, ry, cw, rowH - 4, mats && money ? MineNorthStyle.CYAN : 0xFF8A3040});
+            boolean limit = r.daily() <= 0 || r.used() < r.daily();
+            cards.add(new int[]{x, ry, cw, rowH - 4, mats && money && limit ? MineNorthStyle.CYAN : 0xFF8A3040});
             text(x + 8, ry + 4, fit(r.label() + "  x" + r.qty(), 160), MineNorthStyle.WHITE);
-            text(x + 8, ry + 15, fit(time(r.seconds()) + (r.cents() > 0 ? "  -  " + MineNorthStyle.euros(r.cents()) : ""), 160), MineNorthStyle.MUTED);
+            text(x + 8, ry + 15, fit(time(r.seconds()) + (r.cents() > 0 ? "  -  " + MineNorthStyle.euros(r.cents()) : "") + (r.daily() > 0 ? "  -  " + r.used() + "/" + r.daily() + " auj." : ""), 160), MineNorthStyle.MUTED);
             String nt = needsText(fi, r.needs());
             text(x + 8, ry + 26, fit(nt.isEmpty() ? "Aucune matière" : nt, 160), mats ? MineNorthStyle.TEXT : MineNorthStyle.ALERT);
             final int idx = i;
             btn(x + cw - 78, ry + 8, 74, 20, "Fabriquer", MineNorthStyle.GREEN, () -> act(GangGui.FACTORY_QUEUE, Integer.toString(idx), r.label()))
-                    .enabled(fi.canQueue && !queueFull && mats && money);
+                    .enabled(fi.canQueue && !queueFull && mats && money && limit);
         }
         int py = y + 14 + per * rowH;
         if (pages > 1) {

@@ -32,6 +32,11 @@ public final class Gang {
     final List<ItemStack> legacyItems = new ArrayList<>();
     /** Compte du gang : solde en centimes (géré côté serveur), historique, et grade minimum autorisé à dépenser (0 chef, 1 lieutenant). */
     long balance;
+    /** Part des revenus de zones versée à ce gang, en % (100 = normal ; réglée par l'admin). */
+    int incomePct = 100;
+    /** Fabrications lancées aujourd'hui par recette (limite par jour) et jour concerné (jours depuis 1970). */
+    final java.util.Map<String, Integer> fabDaily = new java.util.HashMap<>();
+    long fabDay;
     int spendRank = GangRank.LIEUTENANT.level();
     final List<Tx> txs = new ArrayList<>();
     /** Début de l'heure en cours pour le plafond de revenu, et somme déjà versée dans cette heure. */
@@ -52,6 +57,14 @@ public final class Gang {
     public List<LogEntry> log() { return Collections.unmodifiableList(log); }
     public boolean hasBase() { return hasBase; }
     public long balance() { return balance; }
+    public int incomePct() { return incomePct; }
+
+    /** Nombre de fabrications lancées aujourd'hui pour cette recette (remis à zéro chaque jour). */
+    public int fabToday(String label) {
+        long day = java.time.LocalDate.now().toEpochDay();
+        if (fabDay != day) { fabDaily.clear(); fabDay = day; }
+        return fabDaily.getOrDefault(label, 0);
+    }
     public GangRank spendRank() { return GangRank.ofLevel(spendRank); }
     public List<Tx> txs() { return Collections.unmodifiableList(txs); }
 
@@ -106,6 +119,11 @@ public final class Gang {
             t.put("Legacy", il);
         }
         t.putLong("Balance", balance);
+        t.putInt("IncomePct", incomePct);
+        t.putLong("FabDay", fabDay);
+        ListTag fd = new ListTag();
+        for (var e : fabDaily.entrySet()) { CompoundTag c = new CompoundTag(); c.putString("K", e.getKey()); c.putInt("N", e.getValue()); fd.add(c); }
+        t.put("FabDaily", fd);
         t.putInt("SpendRank", spendRank);
         ListTag tl = new ListTag();
         for (Tx x : txs) {
@@ -142,6 +160,10 @@ public final class Gang {
             }
         }
         g.balance = Math.max(0, t.getLong("Balance"));
+        g.incomePct = t.contains("IncomePct") ? Math.max(0, Math.min(300, t.getInt("IncomePct"))) : 100;
+        g.fabDay = t.getLong("FabDay");
+        ListTag fd = t.getList("FabDaily", Tag.TAG_COMPOUND);
+        for (int i = 0; i < fd.size(); i++) g.fabDaily.put(fd.getCompound(i).getString("K"), fd.getCompound(i).getInt("N"));
         g.spendRank = t.contains("SpendRank") ? Math.max(0, Math.min(1, t.getInt("SpendRank"))) : GangRank.LIEUTENANT.level();
         ListTag tl = t.getList("Tx", Tag.TAG_COMPOUND);
         for (int i = 0; i < tl.size(); i++) {

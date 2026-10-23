@@ -132,18 +132,12 @@ public final class GangConfig {
             lines.add("");
         }
         lines.add("# ------------------------------------------------------------");
-        lines.add("# FABRIQUE D'ARMES : RECETTES (une par ligne, modifiables aussi en jeu)");
+        lines.add("# FABRIQUE D'ARMES : CATALOGUE DES FABRICATIONS");
         lines.add("# ------------------------------------------------------------");
-        lines.add("# Format : \"Libellé | objet | quantité par lot | secondes | prix en euros\"");
-        lines.add("# L'objet est « modid:objet » suivi si besoin de ses données entre accolades (apostrophes pour les textes), comme TACZ :");
-        lines.add("#   armes     : tacz:modern_kinetic_gun{GunId:'tacz:glock_17',GunCurrentAmmoCount:0}");
-        lines.add("#   munitions : tacz:ammo{AmmoId:'tacz:9mm'}");
-        lines.add("# Le prix est prélevé sur le compte bancaire du chef quand on lance la fabrication.");
-        lines.add("");
-        int n = 1;
-        for (String r : RECIPES) lines.add("fabrique_recette_" + n++ + " = \"" + r + "\"");
-        lines.add("");
-        lines.add("# Colonne facultative « besoins » : matières consommées au lancement, ex. acier:5;poudre:1 (identifiants des matières ci-dessous).");
+        lines.add("# Les fabrications proposées sont dans le fichier fabrique_catalogue.json (même dossier) : écrit par le mod, relu automatiquement.");
+        lines.add("# On les choisit EN JEU : panneau admin (F8) > Gangs > Catalogue (prendre l'objet dans son inventaire, données TACZ conservées).");
+        lines.add("# Les anciennes lignes fabrique_recette_N de ce fichier ne servent plus qu'à créer le catalogue au premier lancement.");
+        lines.add("# Les besoins d'une fabrication (ex. acier:5;poudre:1) utilisent les identifiants des matières ci-dessous.");
         lines.add("");
         lines.add("# ------------------------------------------------------------");
         lines.add("# FABRIQUE D'ARMES : MATIÈRES PREMIÈRES (achetées avec l'argent du compte du gang, modifiables aussi en jeu)");
@@ -220,13 +214,12 @@ public final class GangConfig {
         try { write(file()); } catch (IOException ignored) { /* reste actif jusqu'au redémarrage */ }
     }
 
-    public static synchronized List<FactoryRecipe> recipes() { return FactoryRecipe.parseAll(RECIPES); }
+    /** Anciennes recettes du fichier toml (seulement pour créer le catalogue JSON au premier lancement). */
+    static synchronized List<String> legacyRecipeLines() { return new ArrayList<>(RECIPES); }
 
-    public static synchronized void setRecipes(List<FactoryRecipe> list) {
-        RECIPES.clear();
-        for (FactoryRecipe r : list) RECIPES.add(r.format());
-        try { write(file()); } catch (IOException ignored) { /* reste actif jusqu'au redémarrage */ }
-    }
+    public static List<FactoryRecipe> recipes() { return FactoryCatalogue.all(); }
+
+    public static void setRecipes(List<FactoryRecipe> list) { FactoryCatalogue.save(list); }
 
     public static void setFactoryEnabled(boolean on) { set("fabrique_active", Boolean.toString(on)); }
     public static void setFactoryMaxPerGang(long n) { set("fabrique_max_par_gang", Long.toString(Math.max(1, Math.min(10, n)))); }

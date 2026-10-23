@@ -99,6 +99,23 @@ public final class FactoryManager {
         return null;
     }
 
+    /** Gestion admin : vide les fabriques du gang (stock prêt jeté au sol sur place, file et matières effacées). Renvoie le nombre de fabriques. */
+    static int adminClear(MinecraftServer s, Gang g) {
+        GangData data = GangData.get(s);
+        int n = 0;
+        for (Factory f : data.factoriesOf(g.id)) {
+            dropStock(levelOf(s, f.dim), f);
+            f.queue.clear();
+            f.materials.clear();
+            n++;
+        }
+        if (n > 0) {
+            g.addLog(null, "fabrique vidée par l'administration", GangConfig.logMax());
+            data.setDirty();
+        }
+        return n;
+    }
+
     /** Le gang est dissous : ses fabriques disparaissent, leur stock tombe au sol. */
     public static void destroyAllOf(MinecraftServer s, Gang g) {
         GangData data = GangData.get(s);
@@ -163,7 +180,7 @@ public final class FactoryManager {
         else i.status = "En fabrication.";
         for (Factory.Job j : f.queue) i.queue.add(new GangView.JobInfo(j.label, j.qty, j.totalSeconds, j.remaining));
         for (Factory.Lot l : f.stock) i.stock.add(new GangView.LotInfo(l.label(), l.qty()));
-        for (FactoryRecipe r : GangConfig.recipes()) i.recipes.add(new GangView.Recipe(r.label(), "", r.qty(), r.seconds(), r.cents(), r.needs()));
+        if (me != null) for (FactoryRecipe r : GangConfig.recipes()) if (r.enabled()) i.recipes.add(new GangView.Recipe(r.label(), "", r.qty(), r.seconds(), r.cents(), r.needs(), true, r.daily(), me.fabToday(r.label())));
         for (FactoryMaterial m : GangConfig.materials()) i.materials.add(new GangView.MatInfo(m.id(), m.label(), f.materials.getOrDefault(m.id(), 0), GangConfig.materialCap(), m.pack(), m.cents()));
         return i;
     }
@@ -214,9 +231,11 @@ public final class FactoryManager {
         if (t == null || !f.gang.equals(t.holder())) return "La zone n'est plus tenue par votre gang : la fabrique est arrêtée.";
         if (!GangService.allow(p.getUUID(), "fabrique-queue", 600)) return "Doucement.";
         List<FactoryRecipe> recipes = GangConfig.recipes();
-        int idx = parseInt(indexText);
-        if (idx < 0 || idx >= recipes.size() || !recipes.get(idx).label().equals(label)) return "Cette recette n'existe plus : rouvrez la fabrique.";
-        FactoryRecipe r = recipes.get(idx);
+        FactoryRecipe r = null;
+        for (FactoryRecipe cand : recipes) if (cand.label().equals(label)) { r = cand; break; }
+        if (r == null) return "Cette recette n'existe plus : rouvrez la fabrique.";
+        if (!r.enabled()) return "Cette fabrication est désactivée par l'administration.";
+        if (r.daily() > 0 && me.fabToday(r.label()) >= r.daily()) return "Limite du jour atteinte pour « " + r.label() + " » (" + r.daily() + " par jour et par gang).";
         String bad = FactoryItems.validate(r.spec());
         if (bad != null) return bad;
         if (f.queue.size() >= GangConfig.factoryQueueMax()) return "La file est pleine (" + GangConfig.factoryQueueMax() + " fabrications).";
@@ -235,6 +254,7 @@ public final class FactoryManager {
             if (left > 0) f.materials.put(n.getKey(), left); else f.materials.remove(n.getKey());
         }
         f.queue.add(new Factory.Job(r.label(), r.spec(), r.qty(), r.seconds(), r.seconds(), r.cents(), r.needs()));
+        me.fabDaily.merge(r.label(), 1, Integer::sum);
         me.addLog(p.getUUID(), "lance la fabrication de " + r.label() + (r.cents() > 0 ? " (" + GangService.money(r.cents()) + ")" : ""), GangConfig.logMax());
         data.setDirty();
         return null;
@@ -372,40 +392,32 @@ public final class FactoryManager {
         return null;
     }
 
-    /** a = numéro de recette (-1 = nouvelle), b = « Libellé | objet | quantité | secondes | euros | besoins ». */
+    /** a = numéro de recette, b = « Libellé | quantité | secondes | euros | besoins » : seules les valeurs changent (l'objet se choisit dans le panneau admin F8). */
     public static String adminRecipe(String a, String b) {
         int idx;
         try { idx = Integer.parseInt(a.trim()); } catch (NumberFormatException e) { return "Recette inconnue."; }
         String[] f = b.split("\\|", -1);
-        if (f.length != 6) return "Format : Libellé | objet | quantité | secondes | euros | besoins.";
+        if (f.length != 5) return "Format : Libellé | quantité | secondes | euros | besoins.";
         long qty, sec, cents;
         try {
-            qty = Long.parseLong(f[2].trim());
-            sec = Long.parseLong(f[3].trim());
-            cents = GangRules.parseEuros(f[4], FactoryRecipe.CENTS_MAX);
+            qty = Long.parseLong(f[1].trim());
+            sec = Long.parseLong(f[2].trim());
+            cents = GangRules.parseEuros(f[3], FactoryRecipe.CENTS_MAX);
         } catch (NumberFormatException e) {
             return "Quantité et durée : des nombres entiers.";
         }
         if (cents < 0) return "Prix invalide : un nombre d'euros positif (ex. 25 ou 12,50), 100 000 € au plus.";
-        String needs = f[5].trim();
-        String err = FactoryRecipe.check(f[0], f[1], qty, sec, cents, needs);
-        if (err != null) return err;
-        err = FactoryItems.validate(f[1].trim());
+        List<FactoryRecipe> list = new ArrayList<>(GangConfig.recipes());
+        if (idx < 0 || idx >= list.size()) return "Recette inconnue.";
+        FactoryRecipe old = list.get(idx);
+        String needs = f[4].trim();
+        String err = FactoryRecipe.check(f[0], old.spec(), qty, sec, cents, needs);
         if (err != null) return err;
         java.util.Set<String> known = new java.util.HashSet<>();
         for (FactoryMaterial m : GangConfig.materials()) known.add(m.id());
         for (String id : FactoryRecipe.parseNeeds(needs).keySet()) if (!known.contains(id)) return "Matière inconnue : « " + id + " » (créez-la dans l'onglet Matières).";
-        List<FactoryRecipe> list = new ArrayList<>(GangConfig.recipes());
-        FactoryRecipe r = new FactoryRecipe(f[0].trim(), f[1].trim(), (int) qty, (int) sec, cents, needs);
-        if (idx == -1) {
-            if (list.size() >= RECIPES_MAX) return "Trop de recettes (" + RECIPES_MAX + " au plus).";
-            for (FactoryRecipe o : list) if (o.label().equalsIgnoreCase(r.label())) return "Une recette porte déjà ce libellé.";
-            list.add(r);
-        } else {
-            if (idx < 0 || idx >= list.size()) return "Recette inconnue.";
-            for (int i = 0; i < list.size(); i++) if (i != idx && list.get(i).label().equalsIgnoreCase(r.label())) return "Une recette porte déjà ce libellé.";
-            list.set(idx, r);
-        }
+        for (int i = 0; i < list.size(); i++) if (i != idx && list.get(i).label().equalsIgnoreCase(f[0].trim())) return "Une recette porte déjà ce libellé.";
+        list.set(idx, new FactoryRecipe(f[0].trim(), old.spec(), (int) qty, (int) sec, cents, needs, old.enabled(), old.daily()));
         GangConfig.setRecipes(list);
         return null;
     }
@@ -475,6 +487,7 @@ public final class FactoryManager {
         if (e.phase != TickEvent.Phase.END || e.getServer().getTickCount() % 20 != 0) return;
         MinecraftServer s = e.getServer();
         GangData data = GangData.get(s);
+        FactoryCatalogue.poll(false);
         if (data.factories().isEmpty()) return;
         boolean enabled = GangConfig.factoryEnabled();
         long second = s.getTickCount() / 20;

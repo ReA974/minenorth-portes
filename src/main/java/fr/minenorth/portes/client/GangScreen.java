@@ -552,34 +552,31 @@ public class GangScreen extends Screen {
         });
         btn(x, y + 60, 150, 18, "ENREGISTRER", MineNorthStyle.GREEN, () ->
                 act(GangGui.ADMIN_FACTORY_GLOBAL, (on ? "1" : "0") + ";" + eFacMax.getValue() + ";" + eFacStock.getValue() + ";" + eFacQueue.getValue() + ";" + rank + ";" + eFacMat.getValue(), "", 0));
-        text(x, y + 84, "RECETTES : libellé | objet | qté | s | € | besoins (acier:5;poudre:1)", MineNorthStyle.BLUE);
-        int per = Math.max(2, (ch() - 124) / 24);
-        int total = v.adminRecipes.size() + 1; // la dernière ligne sert à en ajouter une
+        text(x, y + 84, "FABRICATIONS : libellé | qté | s | € | besoins (acier:5;poudre:1)", MineNorthStyle.BLUE);
+        text(x, y + 94, "Choisir les objets, activer, limiter par jour : panneau admin (F8) > Gangs > Catalogue.", MineNorthStyle.MUTED);
+        int per = Math.max(2, (ch() - 134) / 24);
+        int total = v.adminRecipes.size();
         int pages = Math.max(1, (total + per - 1) / per);
         if (page >= pages) page = pages - 1;
+        if (total == 0) text(x, y + 112, "Le catalogue est vide.", MineNorthStyle.MUTED);
         for (int i = page * per, row = 0; i < total && row < per; i++, row++) {
             final int idx = i;
-            boolean isNew = i >= v.adminRecipes.size();
-            GangView.Recipe rc = isNew ? null : v.adminRecipes.get(i);
-            String[] def = isNew ? new String[]{"", "", "1", "60", "0", ""}
-                    : new String[]{rc.label(), rc.spec(), Integer.toString(rc.qty()), Integer.toString(rc.seconds()), plainEuros(rc.cents()), rc.needs()};
+            GangView.Recipe rc = v.adminRecipes.get(i);
+            String[] def = new String[]{rc.label(), Integer.toString(rc.qty()), Integer.toString(rc.seconds()), plainEuros(rc.cents()), rc.needs()};
             String[] vals = recipeVals.getOrDefault(i, def);
-            int ry = y + 98 + row * 24;
-            cards.add(new int[]{x, ry - 2, cw(), 22, isNew ? MineNorthStyle.GREEN : MineNorthStyle.CYAN});
-            EditBox[] bx = new EditBox[6];
-            bx[0] = box(x + 6, ry, 62, "Libellé", vals[0], 32);
-            bx[1] = box(x + 72, ry, 104, "tacz:ammo{…}", vals[1], 220);
-            bx[2] = box(x + 180, ry, 30, "Qté", vals[2], 3);
-            bx[3] = box(x + 214, ry, 38, "Sec", vals[3], 5);
-            bx[4] = box(x + 256, ry, 40, "€", vals[4], 9);
-            bx[5] = box(x + 300, ry, 84, "acier:5", vals[5], 60);
+            int ry = y + 108 + row * 24;
+            cards.add(new int[]{x, ry - 2, cw(), 22, rc.enabled() ? MineNorthStyle.CYAN : 0xFF8A3040});
+            EditBox[] bx = new EditBox[5];
+            bx[0] = box(x + 6, ry, 120, "Libellé", vals[0], 32);
+            bx[1] = box(x + 130, ry, 34, "Qté", vals[1], 3);
+            bx[2] = box(x + 168, ry, 42, "Sec", vals[2], 5);
+            bx[3] = box(x + 214, ry, 46, "€", vals[3], 9);
+            bx[4] = box(x + 264, ry, 150, "acier:5;poudre:1", vals[4], 60);
             recipeBoxes.add(new Object[]{i, bx});
-            btn(x + 388, ry, 38, 18, isNew ? "Ajout" : "OK", MineNorthStyle.GREEN, () ->
-                    act(GangGui.ADMIN_FACTORY_RECIPE, Integer.toString(isNew ? -1 : idx),
-                            bx[0].getValue() + "|" + bx[1].getValue() + "|" + bx[2].getValue() + "|" + bx[3].getValue() + "|" + bx[4].getValue() + "|" + bx[5].getValue(), 0));
-            if (!isNew) btn(x + 430, ry, 56, 18, "Suppr.", MineNorthStyle.PINK, () -> act(GangGui.ADMIN_FACTORY_DELETE, Integer.toString(idx), "", 0));
+            btn(x + 420, ry, 64, 18, "Enregistrer", MineNorthStyle.GREEN, () ->
+                    act(GangGui.ADMIN_FACTORY_RECIPE, Integer.toString(idx), bx[0].getValue() + "|" + bx[1].getValue() + "|" + bx[2].getValue() + "|" + bx[3].getValue() + "|" + bx[4].getValue(), 0));
         }
-        adminPager(x, y + 98 + per * 24, pages);
+        adminPager(x, y + 108 + per * 24, pages);
     }
 
     /** Admin > Matières : les matières premières vendues dans la fabrique (achetées avec l'argent du gang). */
