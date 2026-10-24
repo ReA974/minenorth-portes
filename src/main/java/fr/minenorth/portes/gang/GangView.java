@@ -15,7 +15,6 @@ public final class GangView {
     public record DoorInfo(String dim, long pos, int minRank) {}
     public record Terr(String name, String dim, int x1, int z1, int x2, int z2, String holderTag, String holderName, int holderColor, boolean mine, String status, long incomeCents, boolean customIncome) {}
     public record Invite(String tag, String name, int color, String inviter) {}
-    public record GangInfo(String name, String tag, int color, int members) {}
     /** Recette de la fabrique ; spec n'est rempli que pour les OP (édition en jeu). needs = « acier:5;poudre:1 ». */
     public record Recipe(String label, String spec, int qty, int seconds, long cents, String needs, boolean enabled, int daily, int used) {}
     public record JobInfo(String label, int qty, int total, int remaining) {}
@@ -23,7 +22,6 @@ public final class GangView {
     /** Matière première d'une fabrique : réserve actuelle et plafond, quantité et prix d'un achat. */
     public record MatInfo(String id, String label, int stock, int cap, int pack, long cents) {}
     /** Définition d'une matière (édition en jeu, OP). */
-    public record MaterialDef(String label, String id, int pack, long cents) {}
     /** Mouvement du compte du gang. */
     public record TxInfo(String when, String who, long delta, String label) {}
 
@@ -104,18 +102,11 @@ public final class GangView {
     public final List<Invite> invites = new ArrayList<>();
     public long createCost;
     public int membersMax;
-    public final List<GangInfo> allGangs = new ArrayList<>();
     /** Compte du gang : solde, grade minimum pour dépenser (0 chef, 1 lieutenant), droit du joueur, historique (récent d'abord). */
     public long balance;
     public int spendRank = 1;
     public boolean canSpend;
     public final List<TxInfo> txs = new ArrayList<>();
-    /** Réglages de la fabrique (OP : édition en jeu). */
-    public boolean factoryEnabled;
-    public int factoryMaxPerGang, factoryStockMax, factoryQueueMax, materialCap;
-    public String factoryCollectRank = "";
-    public final List<Recipe> adminRecipes = new ArrayList<>();
-    public final List<MaterialDef> adminMaterials = new ArrayList<>();
     /** Non nul : ouvrir l'écran de la fabrique. */
     public FactoryInfo factory;
 
@@ -136,12 +127,8 @@ public final class GangView {
         b.writeLong(incomePerZone); b.writeLong(incomeCap); b.writeVarInt(incomeMinutes); b.writeVarInt(zonesHeld); b.writeBoolean(incomeNeedsOnline); b.writeBoolean(incomeToGang);
         b.writeCollection(invites, (x, i) -> { x.writeUtf(i.tag); x.writeUtf(i.name); x.writeInt(i.color); x.writeUtf(i.inviter); });
         b.writeLong(createCost); b.writeVarInt(membersMax);
-        b.writeCollection(allGangs, (x, g) -> { x.writeUtf(g.name); x.writeUtf(g.tag); x.writeInt(g.color); x.writeVarInt(g.members); });
         b.writeLong(balance); b.writeVarInt(spendRank); b.writeBoolean(canSpend);
         b.writeCollection(txs, (x, t) -> { x.writeUtf(t.when); x.writeUtf(t.who); x.writeLong(t.delta); x.writeUtf(t.label, 120); });
-        b.writeBoolean(factoryEnabled); b.writeVarInt(factoryMaxPerGang); b.writeVarInt(factoryStockMax); b.writeVarInt(factoryQueueMax); b.writeVarInt(materialCap); b.writeUtf(factoryCollectRank);
-        b.writeCollection(adminRecipes, GangView::writeRecipe);
-        b.writeCollection(adminMaterials, (x, m) -> { x.writeUtf(m.label); x.writeUtf(m.id); x.writeVarInt(m.pack); x.writeLong(m.cents); });
         b.writeBoolean(factory != null);
         if (factory != null) factory.encode(b);
     }
@@ -162,12 +149,8 @@ public final class GangView {
         v.incomePerZone = b.readLong(); v.incomeCap = b.readLong(); v.incomeMinutes = b.readVarInt(); v.zonesHeld = b.readVarInt(); v.incomeNeedsOnline = b.readBoolean(); v.incomeToGang = b.readBoolean();
         v.invites.addAll(b.readList(x -> new Invite(x.readUtf(), x.readUtf(), x.readInt(), x.readUtf())));
         v.createCost = b.readLong(); v.membersMax = b.readVarInt();
-        v.allGangs.addAll(b.readList(x -> new GangInfo(x.readUtf(), x.readUtf(), x.readInt(), x.readVarInt())));
         v.balance = b.readLong(); v.spendRank = b.readVarInt(); v.canSpend = b.readBoolean();
         v.txs.addAll(b.readList(x -> new TxInfo(x.readUtf(), x.readUtf(), x.readLong(), x.readUtf(120))));
-        v.factoryEnabled = b.readBoolean(); v.factoryMaxPerGang = b.readVarInt(); v.factoryStockMax = b.readVarInt(); v.factoryQueueMax = b.readVarInt(); v.materialCap = b.readVarInt(); v.factoryCollectRank = b.readUtf();
-        v.adminRecipes.addAll(b.readList(GangView::readRecipe));
-        v.adminMaterials.addAll(b.readList(x -> new MaterialDef(x.readUtf(), x.readUtf(), x.readVarInt(), x.readLong())));
         if (b.readBoolean()) v.factory = FactoryInfo.decode(b);
         return v;
     }

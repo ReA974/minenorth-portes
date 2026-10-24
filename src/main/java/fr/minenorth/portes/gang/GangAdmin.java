@@ -122,6 +122,23 @@ public final class GangAdmin {
         return out;
     }
 
+    /** Réglages généraux : lignes « clé TAB valeur » (revenus des zones et fabrique d'armes). */
+    public static List<String> settings(MinecraftServer s) {
+        List<String> out = new ArrayList<>();
+        out.add("incZone	" + (GangConfig.incomePerZone() / 100L));
+        out.add("incCap	" + (GangConfig.incomeCapPerHour() / 100L));
+        out.add("incMin	" + (GangConfig.incomeIntervalMs() / 60_000L));
+        out.add("incOnline	" + (GangConfig.incomeNeedsOnline() ? "1" : "0"));
+        out.add("incDest	" + (GangConfig.incomeToGang() ? "gang" : "chef"));
+        out.add("facOn	" + (GangConfig.factoryEnabled() ? "1" : "0"));
+        out.add("facMax	" + GangConfig.factoryMaxPerGang());
+        out.add("facStock	" + GangConfig.factoryStockMax());
+        out.add("facQueue	" + GangConfig.factoryQueueMax());
+        out.add("facMat	" + GangConfig.materialCap());
+        out.add("facRank	" + GangConfig.factoryCollectRank().label().toLowerCase(java.util.Locale.ROOT));
+        return out;
+    }
+
     // ------------------------------------------------------------------ actions
 
     /** Action admin ; renvoie « OK » ou « KO » + TAB + message. actor = l'admin (position et inventaire réels). */
@@ -288,6 +305,23 @@ public final class GangAdmin {
                 if (n != 1) return ko("Confirmation manquante.");
                 int c = FactoryManager.adminClear(s, g);
                 return c == 0 ? ko("Ce gang n'a pas de fabrique.") : ok(c + " fabrique(s) vidée(s) : le stock prêt est tombé au sol, la file et les matières sont effacées.");
+            }
+            case "set.income" -> {
+                String err = GangGui.setGlobalIncome(a, b);
+                return err != null ? ko(err) : ok("Réglages du revenu enregistrés (au prochain versement).");
+            }
+            case "set.factory" -> {
+                String err = FactoryManager.adminGlobal(a);
+                return err != null ? ko(err) : ok("Réglages de la fabrique enregistrés.");
+            }
+            case "mat.set" -> {
+                String err = FactoryManager.adminMaterial(a, b);
+                return err != null ? ko(err) : ok("Matière enregistrée.");
+            }
+            case "mat.remove" -> {
+                if (n != 1) return ko("Confirmation manquante.");
+                String err = FactoryManager.adminMaterialDelete(a);
+                return err != null ? ko(err) : ok("Matière supprimée.");
             }
             case "cat.addSlot" -> {
                 if (actor == null) return ko("Auteur introuvable.");

@@ -30,23 +30,12 @@ public class GangScreen extends Screen {
     private int ticks;
 
     // saisies conservées entre deux reconstructions
-    private String fName = "", fTag = "", fRadius = "40", fConfirm = "", fTerrName = "";
+    private String fName = "", fTag = "", fConfirm = "";
     private int fColor = SWATCHES[0];
-    private String pendingChef = "", pendingKick = "", pendingAdmin = "";
+    private String pendingChef = "", pendingKick = "";
     private boolean leaveStage, dissolveStage;
-    private EditBox eName, eTag, eConfirm, eTerr, eRadius, eIncZone, eIncCap, eIncInt;
-    private int adminPage;
-    private String fIncZone, fIncCap, fIncInt;
-    private Boolean fOnline;
-    private final java.util.Map<String, String> zoneVals = new java.util.HashMap<>();
-    private final List<Object[]> zoneBoxes = new ArrayList<>();
-    private Boolean fFacOn;
-    private String fFacMax, fFacStock, fFacQueue, fFacRank, fFacMat, fDest, fDeposit = "";
-    private EditBox eFacMax, eFacStock, eFacQueue, eFacMat, eDeposit;
-    private final java.util.Map<Integer, String[]> materialVals = new java.util.HashMap<>();
-    private final List<Object[]> materialBoxes = new ArrayList<>();
-    private final java.util.Map<Integer, String[]> recipeVals = new java.util.HashMap<>();
-    private final List<Object[]> recipeBoxes = new ArrayList<>();
+    private EditBox eName, eTag, eConfirm, eDeposit;
+    private String fDeposit = "";
 
     private final List<Object[]> texts = new ArrayList<>();
     private final List<int[]> cards = new ArrayList<>();
@@ -78,10 +67,8 @@ public class GangScreen extends Screen {
             return;
         }
         if (same) return; // rafraîchissement automatique sans changement : on ne touche pas aux champs en cours de saisie
-        if (action && !nv.messageError) { fIncZone = null; fIncCap = null; fIncInt = null; fOnline = null; zoneVals.clear();
-            fFacOn = null; fFacMax = null; fFacStock = null; fFacQueue = null; fFacRank = null; fFacMat = null; fDest = null; recipeVals.clear(); materialVals.clear();
-            if (!nv.messageError) fDeposit = ""; }
-        if (action) { leaveStage = false; if (nv.messageError) { dissolveStage = false; pendingChef = ""; pendingKick = ""; pendingAdmin = ""; } }
+        if (action && !nv.messageError) fDeposit = "";
+        if (action) { leaveStage = false; if (nv.messageError) { dissolveStage = false; pendingChef = ""; pendingKick = ""; } }
         rebuildWidgets();
     }
 
@@ -124,34 +111,12 @@ public class GangScreen extends Screen {
         if (eName != null) fName = eName.getValue();
         if (eTag != null) fTag = eTag.getValue();
         if (eConfirm != null) fConfirm = eConfirm.getValue();
-        if (eTerr != null) fTerrName = eTerr.getValue();
-        if (eRadius != null) fRadius = eRadius.getValue();
-        if (eIncZone != null) fIncZone = eIncZone.getValue();
-        if (eIncCap != null) fIncCap = eIncCap.getValue();
-        if (eIncInt != null) fIncInt = eIncInt.getValue();
-        if (eFacMax != null) fFacMax = eFacMax.getValue();
-        if (eFacStock != null) fFacStock = eFacStock.getValue();
-        if (eFacQueue != null) fFacQueue = eFacQueue.getValue();
-        if (eFacMat != null) fFacMat = eFacMat.getValue();
         if (eDeposit != null) fDeposit = eDeposit.getValue();
-        for (Object[] mb : materialBoxes) {
-            EditBox[] bx = (EditBox[]) mb[1];
-            String[] vals = new String[bx.length];
-            for (int k = 0; k < bx.length; k++) vals[k] = bx[k].getValue();
-            materialVals.put((Integer) mb[0], vals);
-        }
-        for (Object[] rb : recipeBoxes) {
-            EditBox[] bx = (EditBox[]) rb[1];
-            String[] vals = new String[bx.length];
-            for (int k = 0; k < bx.length; k++) vals[k] = bx[k].getValue();
-            recipeVals.put((Integer) rb[0], vals);
-        }
-        for (Object[] zb : zoneBoxes) zoneVals.put((String) zb[0], ((EditBox) zb[1]).getValue());
     }
 
     private void setTab(int t) {
         keep();
-        tab = t; page = 0; leaveStage = false; dissolveStage = false; pendingChef = ""; pendingKick = ""; pendingAdmin = ""; fConfirm = "";
+        tab = t; page = 0; leaveStage = false; dissolveStage = false; pendingChef = ""; pendingKick = ""; fConfirm = "";
         rebuildWidgets();
     }
 
@@ -161,7 +126,6 @@ public class GangScreen extends Screen {
         List<String> t = new ArrayList<>();
         if (v.inGang) { t.add("Membres"); t.add("Bases"); t.add("Territoires"); t.add("Compte"); t.add("Paramètres"); }
         else { t.add("Fonder un gang"); t.add("Invitations" + (v.invites.isEmpty() ? "" : " (" + v.invites.size() + ")")); t.add("Territoires"); }
-        if (v.op) t.add("Admin");
         return t;
     }
 
@@ -170,11 +134,7 @@ public class GangScreen extends Screen {
         super.init();
         clearWidgets();
         texts.clear(); cards.clear(); swatchRects.clear(); mapRects.clear();
-        eName = eTag = eConfirm = eTerr = eRadius = eIncZone = eIncCap = eIncInt = null;
-        zoneBoxes.clear();
-        recipeBoxes.clear();
-        materialBoxes.clear();
-        eFacMax = eFacStock = eFacQueue = eFacMat = eDeposit = null;
+        eName = eTag = eConfirm = eDeposit = null;
         if (v.doorMode != 0 && !doorClosed) { buildDoor(); return; }
         int x = left(), y = top(), w = PANEL_W;
         btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
@@ -193,7 +153,6 @@ public class GangScreen extends Screen {
         else if (name.startsWith("Paramètres")) buildSettings();
         else if (name.startsWith("Fonder")) buildCreate();
         else if (name.startsWith("Invitations")) buildInvites();
-        else if (name.startsWith("Admin")) buildAdmin();
     }
 
     private void pager(int total) {
@@ -429,184 +388,11 @@ public class GangScreen extends Screen {
         }
     }
 
-    // ---- Admin
-    private void buildAdmin() {
-        int x = cx(), y = cy();
-        text(x, y, "ADMINISTRATION (OP)", MineNorthStyle.PINK);
-        String[] pages = {"Zones", "Revenus", "Fabrique", "Matières"};
-        int[] pw = {52, 62, 62, 62};
-        int px = x + 132;
-        for (int i = 0; i < pages.length; i++) {
-            final int pi = i;
-            btn(px, y - 4, pw[i], 16, pages[i], adminPage == i ? MineNorthStyle.PINK : MineNorthStyle.DARK, () -> { keep(); adminPage = pi; page = 0; rebuildWidgets(); });
-            px += pw[i] + 4;
-        }
-        if (adminPage != 0) btn(x + cw() - 70, y - 4, 70, 16, "◀ Retour", MineNorthStyle.DARK, () -> { keep(); adminPage = 0; page = 0; rebuildWidgets(); });
-        if (adminPage == 1) { buildAdminIncome(x, y); return; }
-        if (adminPage == 2) { buildAdminFactory(x, y); return; }
-        if (adminPage == 3) { buildAdminMaterials(x, y); return; }
-        text(x, y + 14, "Créer un territoire autour de vous (toute la hauteur)", MineNorthStyle.MUTED);
-        eTerr = box(x, y + 26, 200, "Nom du territoire", fTerrName, 32);
-        eRadius = box(x + 208, y + 26, 50, "Rayon", fRadius, 3);
-        btn(x + 266, y + 25, 180, 20, "CRÉER ICI", MineNorthStyle.GREEN, () -> act(GangGui.ADMIN_TERR_CREATE, eTerr.getValue(), eRadius.getValue(), 0));
-        int per = Math.max(2, (ch() - 70) / 22);
-        int total = v.territories.size() + v.allGangs.size();
-        int ry = y + 56;
-        int shown = 0;
-        text(x, ry - 4, "TERRITOIRES", MineNorthStyle.BLUE);
-        for (GangView.Terr t : v.territories) {
-            if (shown++ >= per / 2 + 1) break;
-            ry += 20;
-            cards.add(new int[]{x, ry - 2, cw(), 18, 0xFF000000 | t.holderColor()});
-            text(x + 8, ry + 3, fit(t.name() + "  " + (t.holderTag().isEmpty() ? "libre" : "[" + t.holderTag() + "]"), 250), MineNorthStyle.TEXT);
-            btn(x + cw() - 160, ry - 1, 76, 16, "Libérer", MineNorthStyle.DARK, () -> act(GangGui.ADMIN_TERR_FREE, t.name(), "", 0));
-            btn(x + cw() - 80, ry - 1, 76, 16, "Supprimer", MineNorthStyle.PINK, () -> act(GangGui.ADMIN_TERR_DELETE, t.name(), "", 0));
-        }
-        ry += 24;
-        text(x, ry - 4, "GANGS", MineNorthStyle.BLUE);
-        int g = 0;
-        for (GangView.GangInfo gi : v.allGangs) {
-            if (g++ >= per / 2) break;
-            ry += 20;
-            cards.add(new int[]{x, ry - 2, cw(), 18, 0xFF000000 | gi.color()});
-            text(x + 8, ry + 3, fit("[" + gi.tag() + "] " + gi.name() + "  - " + gi.members() + " membre(s)", 280), MineNorthStyle.TEXT);
-            boolean armed = pendingAdmin.equals(gi.tag());
-            btn(x + cw() - 170, ry - 1, 166, 16, armed ? "CONFIRMER (jette le coffre)" : "Dissoudre", MineNorthStyle.PINK, () -> {
-                if (armed) act(GangGui.ADMIN_DISSOLVE, gi.tag(), "1", 0); else { pendingAdmin = gi.tag(); rebuildWidgets(); }
-            });
-        }
-    }
-
-    /** Admin > Revenus : valeurs par défaut, destination, puis le revenu de chaque zone. Tout est revérifié par le serveur. */
-    private void buildAdminIncome(int x, int y) {
-        if (fIncZone == null) fIncZone = Long.toString(v.incomePerZone / 100L);
-        if (fIncCap == null) fIncCap = Long.toString(v.incomeCap / 100L);
-        if (fIncInt == null) fIncInt = Integer.toString(v.incomeMinutes);
-        if (fOnline == null) fOnline = v.incomeNeedsOnline;
-        if (fDest == null) fDest = v.incomeToGang ? "gang" : "chef";
-        text(x, y + 14, "PAR DÉFAUT (toutes les zones sans réglage propre)", MineNorthStyle.BLUE);
-        text(x, y + 28, "Revenu / zone (€)", MineNorthStyle.MUTED);
-        eIncZone = box(x, y + 38, 90, "20", fIncZone, 6);
-        text(x + 100, y + 28, "Plafond / heure (€)", MineNorthStyle.MUTED);
-        eIncCap = box(x + 100, y + 38, 90, "120", fIncCap, 7);
-        text(x + 200, y + 28, "Toutes les (min)", MineNorthStyle.MUTED);
-        eIncInt = box(x + 200, y + 38, 70, "10", fIncInt, 4);
-        final boolean online = fOnline;
-        btn(x + 280, y + 37, 208, 20, "Seulement si un membre est en ligne : " + (online ? "OUI" : "NON"), MineNorthStyle.DARK, () -> { keep(); fOnline = !online; rebuildWidgets(); });
-        final String dest = fDest;
-        btn(x + 196, y + 62, 292, 20, "Revenu versé sur : " + (dest.equals("gang") ? "COMPTE DU GANG" : "COMPTE DU CHEF"), MineNorthStyle.DARK, () -> { keep(); fDest = dest.equals("gang") ? "chef" : "gang"; rebuildWidgets(); });
-        btn(x, y + 62, 190, 20, "ENREGISTRER", MineNorthStyle.GREEN, () ->
-                act(GangGui.ADMIN_INCOME_GLOBAL, eIncZone.getValue() + ";" + eIncCap.getValue() + ";" + eIncInt.getValue() + ";" + dest, online ? "1" : "0", 0));
-
-        text(x, y + 92, "REVENU DE CHAQUE ZONE (€ par versement, vide ou « défaut » = valeur par défaut)", MineNorthStyle.BLUE);
-        int per = Math.max(2, (ch() - 128) / 24);
-        int pages = Math.max(1, (v.territories.size() + per - 1) / per);
-        if (page >= pages) page = pages - 1;
-        if (v.territories.isEmpty()) text(x, y + 108, "Aucun territoire. Créez-en un dans « Zones ».", MineNorthStyle.MUTED);
-        for (int i = page * per, row = 0; i < v.territories.size() && row < per; i++, row++) {
-            GangView.Terr t = v.territories.get(i);
-            int ry = y + 106 + row * 24;
-            cards.add(new int[]{x, ry, cw(), 22, 0xFF000000 | t.holderColor()});
-            text(x + 8, ry + 7, fit(t.name(), 130), MineNorthStyle.WHITE);
-            text(x + 144, ry + 7, fit("actuel : " + MineNorthStyle.euros(t.incomeCents()) + (t.customIncome() ? "" : " (défaut)"), 160), t.customIncome() ? MineNorthStyle.WARN : MineNorthStyle.MUTED);
-            String shown = zoneVals.getOrDefault(t.name(), t.customIncome() ? plainEuros(t.incomeCents()) : "");
-            EditBox eb = box(x + 312, ry + 2, 62, "défaut", shown, 10);
-            zoneBoxes.add(new Object[]{t.name(), eb});
-            btn(x + 380, ry + 2, 48, 18, "OK", MineNorthStyle.GREEN, () -> act(GangGui.ADMIN_INCOME_ZONE, t.name(), eb.getValue(), 0));
-            btn(x + 432, ry + 2, 56, 18, "Défaut", MineNorthStyle.DARK, () -> act(GangGui.ADMIN_INCOME_ZONE, t.name(), "defaut", 0));
-        }
-        adminPager(x, y + 106 + per * 24, pages);
-    }
-
     private void adminPager(int x, int py, int pages) {
         if (pages <= 1) return;
         btn(x, py, 40, 14, "◀", MineNorthStyle.DARK, () -> { keep(); page = Math.max(0, page - 1); rebuildWidgets(); }).enabled(page > 0);
         btn(x + 44, py, 40, 14, "▶", MineNorthStyle.DARK, () -> { keep(); page = Math.min(pages - 1, page + 1); rebuildWidgets(); }).enabled(page < pages - 1);
         text(x + 92, py + 3, "Page " + (page + 1) + "/" + pages, MineNorthStyle.MUTED);
-    }
-
-    /** Admin > Fabrique : réglages généraux puis recettes (libellé, objet, quantité, secondes, euros, besoins). Le serveur revérifie tout. */
-    private void buildAdminFactory(int x, int y) {
-        if (fFacOn == null) fFacOn = v.factoryEnabled;
-        if (fFacMax == null) fFacMax = Integer.toString(v.factoryMaxPerGang);
-        if (fFacStock == null) fFacStock = Integer.toString(v.factoryStockMax);
-        if (fFacQueue == null) fFacQueue = Integer.toString(v.factoryQueueMax);
-        if (fFacMat == null) fFacMat = Integer.toString(v.materialCap);
-        if (fFacRank == null) fFacRank = v.factoryCollectRank;
-        text(x, y + 14, "FABRIQUE D'ARMES (avantage des zones contrôlées)", MineNorthStyle.BLUE);
-        text(x + 118, y + 28, "Par gang", MineNorthStyle.MUTED);
-        text(x + 168, y + 28, "Stock max", MineNorthStyle.MUTED);
-        text(x + 218, y + 28, "File max", MineNorthStyle.MUTED);
-        text(x + 268, y + 28, "Réserve/mat.", MineNorthStyle.MUTED);
-        final boolean on = fFacOn;
-        btn(x, y + 38, 110, 18, "Activée : " + (on ? "OUI" : "NON"), on ? MineNorthStyle.GREEN : MineNorthStyle.DARK, () -> { keep(); fFacOn = !on; rebuildWidgets(); });
-        eFacMax = box(x + 118, y + 38, 46, "1", fFacMax, 2);
-        eFacStock = box(x + 168, y + 38, 46, "10", fFacStock, 3);
-        eFacQueue = box(x + 218, y + 38, 46, "5", fFacQueue, 2);
-        eFacMat = box(x + 268, y + 38, 52, "200", fFacMat, 6);
-        final String rank = fFacRank;
-        btn(x + 326, y + 38, 162, 18, "Récupérer dès : " + rank, MineNorthStyle.DARK, () -> {
-            keep();
-            fFacRank = rank.equals("membre") ? "lieutenant" : rank.equals("lieutenant") ? "chef" : "membre";
-            rebuildWidgets();
-        });
-        btn(x, y + 60, 150, 18, "ENREGISTRER", MineNorthStyle.GREEN, () ->
-                act(GangGui.ADMIN_FACTORY_GLOBAL, (on ? "1" : "0") + ";" + eFacMax.getValue() + ";" + eFacStock.getValue() + ";" + eFacQueue.getValue() + ";" + rank + ";" + eFacMat.getValue(), "", 0));
-        text(x, y + 84, "FABRICATIONS : libellé | qté | s | € | besoins (acier:5;poudre:1)", MineNorthStyle.BLUE);
-        text(x, y + 94, "Choisir les objets, activer, limiter par jour : panneau admin (F8) > Gangs > Catalogue.", MineNorthStyle.MUTED);
-        int per = Math.max(2, (ch() - 134) / 24);
-        int total = v.adminRecipes.size();
-        int pages = Math.max(1, (total + per - 1) / per);
-        if (page >= pages) page = pages - 1;
-        if (total == 0) text(x, y + 112, "Le catalogue est vide.", MineNorthStyle.MUTED);
-        for (int i = page * per, row = 0; i < total && row < per; i++, row++) {
-            final int idx = i;
-            GangView.Recipe rc = v.adminRecipes.get(i);
-            String[] def = new String[]{rc.label(), Integer.toString(rc.qty()), Integer.toString(rc.seconds()), plainEuros(rc.cents()), rc.needs()};
-            String[] vals = recipeVals.getOrDefault(i, def);
-            int ry = y + 108 + row * 24;
-            cards.add(new int[]{x, ry - 2, cw(), 22, rc.enabled() ? MineNorthStyle.CYAN : 0xFF8A3040});
-            EditBox[] bx = new EditBox[5];
-            bx[0] = box(x + 6, ry, 120, "Libellé", vals[0], 32);
-            bx[1] = box(x + 130, ry, 34, "Qté", vals[1], 3);
-            bx[2] = box(x + 168, ry, 42, "Sec", vals[2], 5);
-            bx[3] = box(x + 214, ry, 46, "€", vals[3], 9);
-            bx[4] = box(x + 264, ry, 150, "acier:5;poudre:1", vals[4], 60);
-            recipeBoxes.add(new Object[]{i, bx});
-            btn(x + 420, ry, 64, 18, "Enregistrer", MineNorthStyle.GREEN, () ->
-                    act(GangGui.ADMIN_FACTORY_RECIPE, Integer.toString(idx), bx[0].getValue() + "|" + bx[1].getValue() + "|" + bx[2].getValue() + "|" + bx[3].getValue() + "|" + bx[4].getValue(), 0));
-        }
-        adminPager(x, y + 108 + per * 24, pages);
-    }
-
-    /** Admin > Matières : les matières premières vendues dans la fabrique (achetées avec l'argent du gang). */
-    private void buildAdminMaterials(int x, int y) {
-        text(x, y + 14, "MATIÈRES PREMIÈRES : libellé | identifiant | quantité par achat | prix d'un achat (€)", MineNorthStyle.BLUE);
-        text(x, y + 26, "L'identifiant (a-z, 0-9, _) sert dans les besoins des recettes ; il ne change plus une fois créé.", MineNorthStyle.MUTED);
-        int per = Math.max(2, (ch() - 70) / 24);
-        int total = v.adminMaterials.size() + 1;
-        int pages = Math.max(1, (total + per - 1) / per);
-        if (page >= pages) page = pages - 1;
-        for (int i = page * per, row = 0; i < total && row < per; i++, row++) {
-            final int idx = i;
-            boolean isNew = i >= v.adminMaterials.size();
-            GangView.MaterialDef md = isNew ? null : v.adminMaterials.get(i);
-            String[] def = isNew ? new String[]{"", "", "10", "0"} : new String[]{md.label(), md.id(), Integer.toString(md.pack()), plainEuros(md.cents())};
-            String[] vals = materialVals.getOrDefault(i, def);
-            int ry = y + 42 + row * 24;
-            cards.add(new int[]{x, ry - 2, cw(), 22, isNew ? MineNorthStyle.GREEN : MineNorthStyle.CYAN});
-            EditBox[] bx = new EditBox[4];
-            bx[0] = box(x + 6, ry, 110, "Libellé", vals[0], 24);
-            bx[1] = box(x + 120, ry, 84, "identifiant", vals[1], 16);
-            if (!isNew) bx[1].setEditable(false);
-            bx[2] = box(x + 208, ry, 46, "Qté", vals[2], 4);
-            bx[3] = box(x + 258, ry, 56, "€", vals[3], 9);
-            materialBoxes.add(new Object[]{i, bx});
-            btn(x + 320, ry, 56, 18, isNew ? "Ajout" : "OK", MineNorthStyle.GREEN, () ->
-                    act(GangGui.ADMIN_MATERIAL, Integer.toString(isNew ? -1 : idx), bx[0].getValue() + "|" + bx[1].getValue() + "|" + bx[2].getValue() + "|" + bx[3].getValue(), 0));
-            if (!isNew) btn(x + 380, ry, 64, 18, "Suppr.", MineNorthStyle.PINK, () -> act(GangGui.ADMIN_MATERIAL_DELETE, Integer.toString(idx), "", 0));
-        }
-        adminPager(x, y + 42 + per * 24, pages);
     }
 
     // ---- Compte du gang

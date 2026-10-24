@@ -29,6 +29,9 @@ public final class GangAdminApi {
     /** Matières premières : libellé, identifiant, quantité par achat, prix (centimes). */
     public static List<String> materials(MinecraftServer s) { return GangAdmin.materials(s); }
 
+    /** Réglages généraux : lignes « clé TAB valeur ». */
+    public static List<String> settings(MinecraftServer s) { return GangAdmin.settings(s); }
+
     /** Action admin (voir GangAdmin.act) ; actor = l'administrateur réel (position, inventaire). */
     public static String act(MinecraftServer s, ServerPlayer actor, String action, String a, String b, long n) { return GangAdmin.act(s, actor, action, a, b, n); }
 }

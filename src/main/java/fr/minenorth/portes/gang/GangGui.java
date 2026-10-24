@@ -24,9 +24,8 @@ public final class GangGui {
 
     public static final int REFRESH = 0, CREATE = 1, INVITE = 2, ACCEPT = 3, DECLINE = 4, KICK = 5, SET_RANK = 6, LEAVE = 7, DISSOLVE = 8,
             DOOR_CLAIM = 9, DOOR_REMOVE = 10, DOOR_RANK = 11, DOOR_REMOVE_REMOTE = 12, SETTINGS = 13,
-            ADMIN_TERR_CREATE = 14, ADMIN_TERR_DELETE = 15, ADMIN_TERR_FREE = 16, ADMIN_DISSOLVE = 17, DOOR_CONTEXT = 18, REFRESH_QUIET = 19, ADMIN_INCOME_ZONE = 20, ADMIN_INCOME_GLOBAL = 21,
+            DOOR_CONTEXT = 18, REFRESH_QUIET = 19,
             SET_BASE = 22, FACTORY_QUEUE = 30, FACTORY_CANCEL = 31, FACTORY_COLLECT = 32, FACTORY_SEIZE = 33, FACTORY_VIEW = 34,
-            ADMIN_FACTORY_GLOBAL = 40, ADMIN_FACTORY_RECIPE = 41, ADMIN_FACTORY_DELETE = 42, ADMIN_MATERIAL = 43, ADMIN_MATERIAL_DELETE = 44,
             FACTORY_BUY = 35, GANG_DEPOSIT = 50, GANG_SPEND_RANK = 51;
 
     private static final double NEARBY = 48.0;
@@ -109,17 +108,6 @@ public final class GangGui {
             v.territories.add(new GangView.Terr(t.name, t.dim, t.x1, t.z1, t.x2, t.z2,
                     h == null ? "" : h.tag(), h == null ? "" : h.name(), h == null ? 0x9E9E9E : h.color(), mineT, TerritoryManager.status(data, t, now), t.effectiveIncome(), t.customIncome()));
         }
-        if (v.op) {
-            for (Gang o : data.gangs()) v.allGangs.add(new GangView.GangInfo(o.name(), o.tag(), o.color(), o.members().size()));
-            v.factoryEnabled = GangConfig.factoryEnabled();
-            v.factoryMaxPerGang = GangConfig.factoryMaxPerGang();
-            v.factoryStockMax = GangConfig.factoryStockMax();
-            v.factoryQueueMax = GangConfig.factoryQueueMax();
-            v.materialCap = GangConfig.materialCap();
-            for (FactoryMaterial m : GangConfig.materials()) v.adminMaterials.add(new GangView.MaterialDef(m.label(), m.id(), m.pack(), m.cents()));
-            v.factoryCollectRank = GangConfig.factoryCollectRank().label().toLowerCase(Locale.ROOT);
-            for (FactoryRecipe r : GangConfig.recipes()) v.adminRecipes.add(new GangView.Recipe(r.label(), "", r.qty(), r.seconds(), r.cents(), r.needs(), r.enabled(), r.daily(), 0));
-        }
         return v;
     }
 
@@ -179,20 +167,6 @@ public final class GangGui {
                 err = GangDoors.offerOwnDoor(p, BlockPos.of(pos));
                 if (err == null) return;
             }
-            case ADMIN_TERR_CREATE -> {
-                if (!p.hasPermissions(2)) return;
-                int r;
-                try { r = Integer.parseInt(b.trim()); } catch (NumberFormatException e) { r = -1; }
-                if (r < 2 || r > 200) err = "Rayon : 2 à 200 blocs.";
-                else {
-                    BlockPos o = p.blockPosition();
-                    err = TerritoryManager.create(p.server, a, p.level().dimension().location().toString(), o.getX() - r, p.level().getMinBuildHeight(),
-                            o.getZ() - r, o.getX() + r, p.level().getMaxBuildHeight() - 1, o.getZ() + r);
-                }
-                ok = "Territoire créé autour de vous.";
-            }
-            case ADMIN_TERR_DELETE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.delete(p.server, a); ok = "Territoire supprimé."; }
-            case ADMIN_TERR_FREE -> { if (!p.hasPermissions(2)) return; err = TerritoryManager.free(p.server, a); ok = "Territoire libéré."; }
             case SET_BASE -> { err = GangService.setBase(p); ok = "Base définie ici : les portes libres proches pourront rejoindre le gang."; }
             case FACTORY_QUEUE, FACTORY_CANCEL, FACTORY_COLLECT, FACTORY_SEIZE, FACTORY_VIEW -> { FactoryManager.handle(p, action, a, b, pos); return; }
             case FACTORY_BUY -> { FactoryManager.handle(p, action, a, b, pos); return; }
@@ -206,23 +180,6 @@ public final class GangGui {
                 err = r == null ? "Grade inconnu." : GangService.setSpendRank(p, r);
                 ok = "Règle des dépenses enregistrée.";
             }
-            case ADMIN_MATERIAL -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminMaterial(a, b); ok = "Matière enregistrée."; }
-            case ADMIN_MATERIAL_DELETE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminMaterialDelete(a); ok = "Matière supprimée."; }
-            case ADMIN_FACTORY_GLOBAL -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminGlobal(a); ok = "Réglages de la fabrique enregistrés."; }
-            case ADMIN_FACTORY_RECIPE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminRecipe(a, b); ok = "Recette enregistrée."; }
-            case ADMIN_FACTORY_DELETE -> { if (!p.hasPermissions(2)) return; err = FactoryManager.adminDelete(a); ok = "Recette supprimée."; }
-            case ADMIN_INCOME_ZONE -> {
-                if (!p.hasPermissions(2)) return;
-                long cents = parseEuros(b);
-                err = cents == -2 ? "Montant invalide : un nombre d'euros positif (ex. 20 ou 12,50), ou « défaut »." : TerritoryManager.setIncome(p.server, a, cents);
-                ok = cents == -1 ? "Cette zone utilise maintenant le revenu par défaut (au prochain versement)." : "Revenu de la zone enregistré (au prochain versement).";
-            }
-            case ADMIN_INCOME_GLOBAL -> {
-                if (!p.hasPermissions(2)) return;
-                err = setGlobalIncome(a, b);
-                ok = "Réglages du revenu enregistrés (au prochain versement).";
-            }
-            case ADMIN_DISSOLVE -> { if (!p.hasPermissions(2)) return; err = GangService.adminDissolve(p, a, "1".equals(b)); ok = "Gang dissous."; }
             default -> { return; }
         }
         send(p, true, 0, 0, 0, err != null ? err : ok, err != null);
@@ -232,7 +189,7 @@ public final class GangGui {
     static long parseEuros(String s) { return GangRules.parseEuros(s, Territory.MAX_INCOME); }
 
     /** a = « revenuParZone;plafondHeure;intervalleMinutes;destination » (euros entiers, minutes, destination gang ou chef), b = « 1 » si le versement exige un membre en ligne. Tout est vérifié avant d'appliquer quoi que ce soit. */
-    private static String setGlobalIncome(String a, String b) {
+    static String setGlobalIncome(String a, String b) {
         String[] parts = a.split(";", -1);
         if (parts.length != 4) return "Réglages incomplets.";
         String dest = parts[3].trim();
