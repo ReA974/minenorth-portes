@@ -14,6 +14,7 @@ public final class GangClient {
     /** Appelé par le paquet serveur -> client. */
     public static void onView(GangView view) {
         Minecraft mc = Minecraft.getInstance();
+        if (phone() && fr.minenorth.portes.client.phone.PhoneGang.handle(view)) return;
         Screen cur = mc.screen;
         if (cur instanceof FactoryScreen fs) {
             fs.update(view);
@@ -28,14 +29,21 @@ public final class GangClient {
         }
     }
 
+    /** Téléphone MikasRevs Phone 2 présent : à tester AVANT de toucher phone.PhoneGang. */
+    public static boolean phone() { return net.minecraftforge.fml.ModList.get().isLoaded("newphone"); }
+
     public static void send(int action, String a, String b, long pos) { ModNetwork.CHANNEL.sendToServer(new GangActionPacket(action, a == null ? "" : a, b == null ? "" : b, pos)); }
 
     public static void requestOpen() { send(GangGui.REFRESH, "", "", 0); }
 
-    /** Appelé par l'application « Mon gang » du téléphone MRPhone (jar patché, par réflexion) : ferme le téléphone puis ouvre l'écran. */
+    /**
+     * Appelé par l'application « Mon gang » du téléphone MRPhone (jar patché, par réflexion) : l'application s'ouvre DANS le téléphone
+     * (phone.PhoneGangScreen) dès que le serveur a répondu. Sans le téléphone : ancien comportement (grand écran).
+     */
     public static void openFromPhone() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
+        if (phone()) { fr.minenorth.portes.client.phone.PhoneGang.request(); return; }
         mc.setScreen(null);
         requestOpen();
     }

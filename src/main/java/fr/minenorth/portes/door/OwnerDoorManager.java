@@ -252,6 +252,12 @@ public final class OwnerDoorManager {
                 e.setCancellationResult(InteractionResult.SUCCESS);
                 return;
             }
+            // Pompier en intervention avec une hache / un halligan : le mod Secours force la porte (rien n'est cassé).
+            if (e.getHand() == InteractionHand.MAIN_HAND && !canOpen(p, l, e.getPos(), entry) && SecoursCompat.tryForce(p, e.getPos())) {
+                e.setCanceled(true);
+                e.setCancellationResult(InteractionResult.SUCCESS);
+                return;
+            }
             if (!canOpen(p, l, e.getPos(), entry)) {
                 p.displayClientMessage(Component.translatable("message.minenorthsysteme.door_denied"), true);
                 e.setCanceled(true);
