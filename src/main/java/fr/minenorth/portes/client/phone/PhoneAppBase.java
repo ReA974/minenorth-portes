@@ -66,6 +66,22 @@ public abstract class PhoneAppBase extends AbstractZPhoneScreen {
 
     protected void tabChanged() {}
 
+    // ------------------------------------------------------------------ thème (une appli peut changer d'ambiance : l'appli Déco change par magasin)
+
+    protected int bg() { return BG; }
+
+    protected int titleColor() { return WHITE; }
+
+    protected int tabOn() { return CYAN; }
+
+    protected int tabOff() { return HOVER; }
+
+    /** Couleur du texte des boutons actifs. */
+    protected int buttonText() { return WHITE; }
+
+    /** Dessin libre derrière le titre (bandeau, motif, logo), juste après le fond. */
+    protected void decor(GuiGraphics g) {}
+
     // ------------------------------------------------------------------ outils de dessin (unités du téléphone)
 
     protected void box(GuiGraphics g, float l, float t, float r, float b, float rad, int c) {
@@ -108,7 +124,7 @@ public abstract class PhoneAppBase extends AbstractZPhoneScreen {
     protected void button(GuiGraphics g, int mx, int my, float l, float t, float r, float b, String label, float sz, int color, boolean active, Runnable act) {
         boolean hov = active && hover(mx, my, l, t, r, b);
         box(g, l, t, r, b, Math.min(10, (b - t) / 2), !active ? DISABLED : hov ? lighten(color) : color);
-        center(g, label, (l + r) / 2, t + (b - t - sz) / 2, sz, r - l - 6, active ? WHITE : MUTED);
+        center(g, label, (l + r) / 2, t + (b - t - sz) / 2, sz, r - l - 6, active ? buttonText() : MUTED);
         if (active) hit(l, t, r, b, act);
     }
 
@@ -148,9 +164,10 @@ public abstract class PhoneAppBase extends AbstractZPhoneScreen {
         clipT = 0;
         clipB = 1000;
         renderBackground(g);
-        g.fill(x(3), y(8), x(297), y(606), BG);
+        g.fill(x(3), y(8), x(297), y(606), bg());
+        decor(g);
         drawStatusBar(g);
-        drawText(g, title(), 22, 56, 20, WHITE, false);
+        drawText(g, title(), 22, 56, 20, titleColor(), false);
         String badge = badge();
         if (!badge.isEmpty()) {
             box(g, 186, 58, 284, 76, 9, badgeColor());
@@ -164,7 +181,7 @@ public abstract class PhoneAppBase extends AbstractZPhoneScreen {
         for (int i = 0; i < tabs.length; i++) {
             final int idx = i;
             float l = L + (i % perRow) * (tabW + 5), t = 90 + (i / perRow) * 26;
-            button(g, mx, my, l, t, l + tabW, t + 22, tabs[i], 8.5f, tab == i ? CYAN : HOVER, true, () -> {
+            button(g, mx, my, l, t, l + tabW, t + 22, tabs[i], 8.5f, tab == i ? tabOn() : tabOff(), true, () -> {
                 if (tab != idx) { tab = idx; scroll = 0; focused = null; tabChanged(); }
             });
         }
