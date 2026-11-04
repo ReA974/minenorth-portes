@@ -722,6 +722,11 @@ public final class OwnerDoorManager {
                 if (!player.hasPermissions(2) || entry == null) return;
                 sendAdminPanel(player, level, pos, entry);
             }
+            // Sélecteur « Vue joueur » du panneau admin : retour à l'aperçu de ce que voit le joueur.
+            case 24 -> {
+                if (!player.hasPermissions(2) || entry == null) return;
+                sendAdminPreview(player, level, pos, entry);
+            }
             case 14 -> {
                 if (!player.hasPermissions(2) || entry == null) return;
                 data.clearHouseListings(key);

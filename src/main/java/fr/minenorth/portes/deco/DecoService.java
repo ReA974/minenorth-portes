@@ -88,7 +88,7 @@ public final class DecoService {
         if (!(hit instanceof BlockHitResult bh) || hit.getType() != HitResult.Type.BLOCK) return "Visez le meuble à ranger (à moins de 5 blocs), puis appuyez sur Ranger.";
         ServerLevel level = p.serverLevel();
         BlockPos pos = bh.getBlockPos();
-        Zones.Home there = Zones.at(p.server, level, pos);
+        Zones.Home there = Zones.atFor(p.server, level, pos, p.getUUID());
         if (there == null || !there.occ().key().equals(home.occ().key())) return "Ce bloc n'est pas dans votre logement.";
         PlacedLedger ledger = PlacedLedger.get(p.server);
         String dim = level.dimension().location().toString();

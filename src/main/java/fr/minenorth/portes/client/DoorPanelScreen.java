@@ -85,14 +85,23 @@ public class DoorPanelScreen extends Screen {
             case 6 -> buildRenter(x, y, w);
             default -> { if (splitLayout()) buildSplit(x, y, w); else buildAdmin(x, y, w); }
         }
-        btn(x + w - 100, y + 10, 86, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
-        // En haut, à côté de « Fermer » : en bas du panneau (460 px) le bouton sortait de l'écran avec une échelle d'interface (GUI) de 3.
-        if (data.mode() == 1 && "PERSONAL".equals(data.type())) btn(x + w - 100 - 140 - 8, y + 10, 140, 16, "PORTE DE GANG", MineNorthStyle.PINK, () -> {
+        // Barre d'actions en haut à droite, de droite à gauche, sans chevauchement : Fermer, sélecteur Vue joueur / Admin (OP), puis le bouton
+        // propre au panneau (porte de gang, fiche agence). En bas du panneau (460 px) les boutons sortaient de l'écran en échelle d'interface 3.
+        int right = x + w - 14;
+        btn(right - 46, y + 10, 46, 16, "Fermer", MineNorthButton.GHOST, this::onClose);
+        right -= 46 + 10;
+        boolean adminView = data.mode() == 4;
+        if (data.adminPreview() || (adminView && !splitLayout())) {
+            int tw = 74;
+            addRenderableWidget(new Tab(right - 2 * tw, y + 9, tw, 18, "Vue joueur", !adminView, true, () -> send(24, "", false, "")));
+            addRenderableWidget(new Tab(right - tw, y + 9, tw, 18, "Admin", adminView, false, () -> send(20, "", false, "")));
+            right -= 2 * tw + 10;
+        }
+        if (data.mode() == 1 && "PERSONAL".equals(data.type())) btn(right - 104, y + 10, 104, 16, "Porte de gang", MineNorthStyle.PINK, () -> {
             fr.minenorth.portes.network.ModNetwork.CHANNEL.sendToServer(new fr.minenorth.portes.network.GangActionPacket(fr.minenorth.portes.gang.GangGui.DOOR_CONTEXT, "", "", data.pos()));
             onClose();
         });
-        if (data.adminPreview()) btn(x + w - 100 - 96 - 8, y + 10, 96, 16, "ADMIN", MineNorthStyle.PINK, () -> send(20, "", false, ""));
-        if (data.mode() == 4 && data.houseName() != null && !data.houseName().isBlank()) btn(x + w - 100 - 130 - 8, y + 10, 130, 16, "FICHE AGENCE", MineNorthStyle.CYAN, () -> net.minecraft.client.Minecraft.getInstance().setScreen(new PropertyConfigScreen(data)));
+        if (adminView && data.houseName() != null && !data.houseName().isBlank()) btn(right - 104, y + 10, 104, 16, "Fiche agence", MineNorthStyle.CYAN, () -> net.minecraft.client.Minecraft.getInstance().setScreen(new PropertyConfigScreen(data)));
     }
 
     // ------------------------------------------------------------------
@@ -530,4 +539,37 @@ public class DoorPanelScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
+    /**
+     * Onglet du sélecteur « Vue joueur / Admin » : deux onglets accolés dans un rail sombre, l'onglet actif plein (rose MineNorth, texte blanc),
+     * l'autre en texte atténué qui s'éclaire au survol. Cliquer l'onglet déjà actif ne fait rien.
+     */
+    private static final class Tab extends net.minecraft.client.gui.components.AbstractButton {
+        private final boolean selected, first;
+        private final Runnable action;
+
+        Tab(int x, int y, int w, int h, String label, boolean selected, boolean first, Runnable action) {
+            super(x, y, w, h, Component.literal(label));
+            this.selected = selected;
+            this.first = first;
+            this.action = action;
+        }
+
+        @Override public void onPress() { if (!selected) action.run(); }
+
+        @Override protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput out) { defaultButtonNarrationText(out); }
+
+        @Override
+        public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+            int x0 = getX(), y0 = getY(), x1 = x0 + width, y1 = y0 + height;
+            g.fill(x0, y0, x1, y1, MineNorthStyle.FRAME);                                     // rail
+            g.fill(x0 + (first ? 1 : 0), y0 + 1, x1 - (first ? 0 : 1), y1 - 1, MineNorthStyle.LIST);
+            boolean hov = isHoveredOrFocused() && !selected;
+            if (selected) g.fill(x0 + 2, y0 + 2, x1 - 2, y1 - 2, MineNorthStyle.PINK);
+            else if (hov) g.fill(x0 + 2, y0 + 2, x1 - 2, y1 - 2, MineNorthStyle.HOVER);
+            net.minecraft.client.gui.Font f = net.minecraft.client.Minecraft.getInstance().font;
+            String label = getMessage().getString();
+            g.drawString(f, label, x0 + width / 2 - f.width(label) / 2, y0 + (height - 8) / 2, selected || hov ? MineNorthStyle.WHITE : MineNorthStyle.MUTED, false);
+        }
+    }
 }

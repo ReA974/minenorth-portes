@@ -21,7 +21,7 @@ public final class DecoConfig {
     private static final Path FILE = DIR.resolve("deco.json");
 
     public String _aide = "gardeMeubleBase = objets rangés au plus (les VIP ajoutent l'avantage gardeMeuble du mod VIP). Un déménagement automatique "
-            + "n'est jamais refusé, même au-delà. rayonSansRegion : si la région WorldGuard d'une maison est introuvable, « chez soi » = à moins de ce "
+            + "n'est jamais refusé, même au-delà. rayonSansRegion : « chez soi » = dans la région WorldGuard de la maison, ou à moins de ce "
             + "nombre de blocs d'une de ses portes. Terrains : surface et côtés maximum à la création, hauteur / profondeur maximum autour du sol, "
             + "blocsParTick = vitesse de remise à nu.";
     public boolean actif = true;

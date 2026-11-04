@@ -31,6 +31,19 @@ public final class Zones {
             return level.dimension().location().toString().equals(occ.dimension()) && shape.contains(p.getX(), p.getY(), p.getZ());
         }
 
+        /**
+         * Le joueur est-il chez lui ici ? Dans la région (ou la zone du terrain), ou bien à moins de {@code rayonSansRegion} blocs d'une porte du
+         * bien : une région WorldGuard tracée trop juste (ou absente du fichier lu) ne doit pas empêcher l'occupant d'être reconnu chez lui.
+         */
+        public boolean around(Level level, BlockPos p) {
+            if (contains(level, p)) return true;
+            if (terrain() || !level.dimension().location().toString().equals(occ.dimension())) return false;
+            int r = DecoConfig.get().rayonSansRegion;
+            for (BlockPos d : occ.doors())
+                if (Math.abs(d.getX() - p.getX()) <= r && Math.abs(d.getZ() - p.getZ()) <= r && p.getY() >= d.getY() - 6 && p.getY() <= d.getY() + r) return true;
+            return false;
+        }
+
         public boolean livesHere(UUID player) { return occ.occupants().contains(player); }
 
         public boolean terrain() { return occ.category() == PropertyCategory.LAND; }
@@ -102,15 +115,20 @@ public final class Zones {
         return approx;
     }
 
-    /** Bien où se trouve le joueur et dont il est occupant, ou null : il n'est pas chez lui. */
-    public static Home homeOf(ServerPlayer p) {
+    /** Bien de cet occupant qui contient cette position (sa région d'abord, puis les abords de ses portes), ou null. */
+    public static Home atFor(MinecraftServer s, Level level, BlockPos pos, UUID player) {
         Home found = null;
-        for (Home h : homes(p.server)) {
-            if (!h.livesHere(p.getUUID()) || !h.contains(p.level(), p.blockPosition())) continue;
-            if (h.fromRegion()) return h;
-            if (found == null) found = h;
+        for (Home h : homes(s)) {
+            if (!h.livesHere(player)) continue;
+            if (h.fromRegion() && h.contains(level, pos)) return h;
+            if (found == null && h.around(level, pos)) found = h;
         }
         return found;
+    }
+
+    /** Bien où se trouve le joueur et dont il est occupant, ou null : il n'est pas chez lui. */
+    public static Home homeOf(ServerPlayer p) {
+        return atFor(p.server, p.level(), p.blockPosition(), p.getUUID());
     }
 
     /** Bien par sa clé (dimension|nom), ou null. */

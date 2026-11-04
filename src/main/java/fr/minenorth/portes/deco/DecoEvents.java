@@ -59,8 +59,8 @@ public final class DecoEvents {
         if (e.isCanceled() || !DecoConfig.get().actif) return;
         if (!(e.getEntity() instanceof ServerPlayer p) || !(e.getLevel() instanceof ServerLevel level)) return;
         BlockPos pos = e.getPos();
-        Zones.Home h = Zones.at(p.server, level, pos);
-        if (h == null || !h.livesHere(p.getUUID())) return;
+        Zones.Home h = Zones.atFor(p.server, level, pos, p.getUUID());
+        if (h == null) return;
         ItemStack item = held(p, e);
         if (item.isEmpty()) return;
         List<Part> parts = new ArrayList<>();

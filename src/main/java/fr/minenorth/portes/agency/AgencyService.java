@@ -233,7 +233,15 @@ public final class AgencyService {
         PropertyInfoData infos = PropertyInfoData.get(s.overworld());
         List<Occupancy> out = new ArrayList<>();
         for (House h : houses(d)) {
+            // Porte qui porte le titulaire : la première d'abord (comportement d'origine), sinon n'importe quelle autre porte du bien
+            // (un bien dont la première porte est une porte de service sans propriétaire n'avait jamais d'occupant : Déco ne détectait pas « chez soi »).
             DoorEntry e = d.entry(h.first());
+            if (e == null || !(companyDoor(e) || (e.type() == OwnerDoorData.DoorType.PERSONAL && e.owner() != null))) {
+                for (DoorKey k : h.doors()) {
+                    DoorEntry o = d.entry(k);
+                    if (o != null && !o.temporary() && (companyDoor(o) || (o.type() == OwnerDoorData.DoorType.PERSONAL && o.owner() != null))) { e = o; break; }
+                }
+            }
             DoorListing l = listing(d, h);
             boolean rented = l != null && l.mode() == ListingMode.RENTAL && l.rentalActive();
             String key = "";
