@@ -279,7 +279,13 @@ public final class WorldGuardBridge {
         return cfg.prefixeRegion + n;
     }
 
-    private static String worldName(MinecraftServer s, String dim) {
+    /** Fichier regions.yml de WorldGuard pour cette dimension (peut ne pas exister : autre stockage). */
+    public static Path regionsFile(MinecraftServer s, String dim) {
+        return FMLPaths.GAMEDIR.get().resolve("plugins").resolve("WorldGuard").resolve("worlds").resolve(worldName(s, dim)).resolve("regions.yml");
+    }
+
+    /** Nom du monde Bukkit d'une dimension (réglage mondeOverworld, sinon dossier du monde). */
+    public static String worldName(MinecraftServer s, String dim) {
         String base = cfg.mondeOverworld.isBlank() ? s.getWorldData().getLevelName() : cfg.mondeOverworld;
         return switch (dim) {
             case "minecraft:overworld" -> base;

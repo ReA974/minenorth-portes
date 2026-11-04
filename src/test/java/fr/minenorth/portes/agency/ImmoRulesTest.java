@@ -9,6 +9,7 @@ class ImmoRulesTest {
     @Test void resaleRoundsDown() { assertEquals(0L, ImmoRules.resaleCents(1)); }
     @Test void limitsAreTwoPerCategory() {
         for (PropertyCategory c : PropertyCategory.values()) {
+            if (c == PropertyCategory.LAND) continue;   // terrain : 1 par joueur
             assertEquals(2, ImmoRules.limit(c));
             assertTrue(ImmoRules.canAcquire(c, 1));
             assertFalse(ImmoRules.canAcquire(c, 2));
@@ -22,8 +23,12 @@ class ImmoRulesTest {
         assertEquals(2, ImmoRules.limit(PropertyCategory.LOCAL));
         assertNotEquals(PropertyCategory.BUSINESS, PropertyCategory.LOCAL);
     }
-    @Test void allEightCategoriesExistWithFrenchLabels() {
-        assertEquals(8, PropertyCategory.values().length);
+    @Test void allNineCategoriesExistWithFrenchLabels() {
+        assertEquals(9, PropertyCategory.values().length);
+        assertEquals(PropertyCategory.LAND, PropertyCategory.from("land"));
+        assertEquals(1, ImmoRules.limit(PropertyCategory.LAND));
+        assertEquals(2, ImmoRules.limit(PropertyCategory.LAND, 1));
+        assertEquals(2, ImmoRules.limit(PropertyCategory.GARAGE, 1));
         assertEquals(PropertyCategory.SMALL_SHOP, PropertyCategory.from("small_shop"));
         assertEquals(PropertyCategory.STORAGE, PropertyCategory.from("STORAGE"));
         assertEquals(PropertyCategory.GARAGE, PropertyCategory.from("garage"));

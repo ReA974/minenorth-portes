@@ -218,12 +218,58 @@ public final class AgencyService {
         return out;
     }
 
+    /**
+     * Occupation d'un bien pour la décoration et le déménagement. holderKey : titulaire (« p:uuid » propriétaire ou locataire, « c:id » entreprise),
+     * vide si personne ; holder : joueur titulaire (patron pour une entreprise) ; occupants : titulaire + colocataires (patron seul pour une entreprise).
+     */
+    public record Occupancy(String dimension, String houseName, PropertyCategory category, String holderKey, UUID holder, java.util.Set<UUID> occupants,
+                            List<BlockPos> doors) {
+        public String key() { return PropertyInfoData.key(dimension, houseName); }
+    }
+
+    /** Occupation de tous les biens (thread serveur). */
+    public static List<Occupancy> occupancies(MinecraftServer s) {
+        OwnerDoorData d = OwnerDoorData.get(s.overworld());
+        PropertyInfoData infos = PropertyInfoData.get(s.overworld());
+        List<Occupancy> out = new ArrayList<>();
+        for (House h : houses(d)) {
+            DoorEntry e = d.entry(h.first());
+            DoorListing l = listing(d, h);
+            boolean rented = l != null && l.mode() == ListingMode.RENTAL && l.rentalActive();
+            String key = "";
+            UUID holder = null;
+            java.util.Set<UUID> occ = new java.util.LinkedHashSet<>();
+            if (e != null && companyDoor(e)) {
+                int cid = EntrepriseCompat.id(e.permission());
+                key = "c:" + cid;
+                holder = EntrepriseCompat.ownerUuid(s, cid);
+            } else if (rented && l.renterCompany() > 0) {
+                key = "c:" + l.renterCompany();
+                holder = EntrepriseCompat.ownerUuid(s, l.renterCompany());
+            } else if (e != null && e.type() == OwnerDoorData.DoorType.PERSONAL && e.owner() != null) {
+                holder = e.owner();
+                key = "p:" + holder;
+                occ.addAll(d.trusted(holder));
+            } else if (rented && l.renter() != null) {
+                holder = l.renter();
+                key = "p:" + holder;
+                occ.addAll(d.trusted(holder));
+            }
+            if (holder != null) occ.add(holder);
+            List<BlockPos> doors = new ArrayList<>();
+            for (DoorKey k : h.doors()) doors.add(k.pos());
+            out.add(new Occupancy(h.dimension(), h.name(), infos.info(d, h.dimension(), h.name()).category(), key, holder, occ, doors));
+        }
+        return out;
+    }
+
     // ------------------------------------------------------------------ actions
 
-    static void persist(MinecraftServer s, OwnerDoorData d) {
+    public static void persist(MinecraftServer s, OwnerDoorData d) {
         SystemeConfigFiles.writeDoors(s, d);
         ModNetwork.syncDoorLocks(s);
         MapBridge.refresh(s);   // la carte pose / retire le point du local tout de suite
+        fr.minenorth.portes.deco.MoveWatcher.check(s);   // déménagement immédiat si le titulaire a changé (vente, expulsion, libération…)
     }
 
     static String euros(long cents) { return String.format(Locale.FRANCE, "%.2f €", cents / 100.0); }
@@ -305,6 +351,8 @@ public final class AgencyService {
         if (e != null && e.owner() != null && e.owner().equals(p.getUUID())) return AgencyResult.fail("Vous possédez déjà ce bien.");
         var info = PropertyInfoData.get(s.overworld()).info(d, h.dimension(), h.name());
         PropertyCategory cat = info.category();
+        if (cat == PropertyCategory.LAND && fr.minenorth.portes.deco.TerrainService.busy(s, h.dimension(), h.name()))
+            return AgencyResult.fail("Ce terrain est en cours de remise à nu : réessayez dans quelques instants.");
         UUID payeeAcc = payeeAccount(s, info);
         // Entreprise : obligatoire pour un local d'entreprise, au choix (companyId > 0) pour local, stockage et garage ; ignorée sinon.
         boolean asCompany = cat.companyOnly() || (cat.companyOptional() && companyId > 0);
@@ -319,8 +367,10 @@ public final class AgencyService {
             if (!ImmoRules.canAcquire(cat, heldCountCompany(s, companyId, cat))) return AgencyResult.fail("Limite atteinte pour cette entreprise : " + ImmoRules.limit(cat) + " biens de type « " + cat.label() + " ».");
             r = collect(p, companyId, payeeAcc, null, price, source);
         } else {
-            if (!ImmoRules.canAcquire(cat, heldCount(s, p.getUUID(), cat))) {
-                return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat) + " biens de type « " + cat.label() + " ».");
+            int bonus = fr.minenorth.portes.deco.VipPerks.housingBonus(p);
+            if (!ImmoRules.canAcquire(cat, heldCount(s, p.getUUID(), cat), bonus)) {
+                return AgencyResult.fail("Limite atteinte : " + ImmoRules.limit(cat, bonus) + " biens de type « " + cat.label() + " »"
+                        + (cat.residential() && bonus == 0 ? " (un logement de plus avec le VIP)." : "."));
             }
             r = collect(p, 0, payeeAcc, e == null ? null : e.owner(), price, source);
         }

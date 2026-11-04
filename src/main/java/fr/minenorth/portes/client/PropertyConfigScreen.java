@@ -12,7 +12,7 @@ import java.util.List;
 
 /** Fiche d'agence d'un bien (admin) : catégorie, meublé, catalogue, entreprise bénéficiaire, description, photos. S'ouvre depuis le panneau de porte. */
 public class PropertyConfigScreen extends Screen {
-    private static final int W = 420, H = 340, PER_ROW = 4;
+    private static final int W = 420, H = 340, PER_ROW = 5;
     private final ModNetwork.DoorPanelPacket data;
     private String category;
     private boolean furnished;

@@ -41,7 +41,8 @@ public final class PropertyAdmin {
      * Une ligne par propriété, champs séparés par une tabulation (un nom de maison n'en contient jamais) :
      * 0 dimension, 1 nom, 2 catégorie (nom de l'enum), 3 fiche (NONE / SALE / RENTAL), 4 prix de la fiche en centimes, 5 jours de location,
      * 6 uuid du propriétaire, 7 uuid du locataire, 8 id entreprise locataire, 9 fin de location (ms), 10 nombre de portes, 11 x, 12 y, 13 z,
-     * 14 catalogue, 15 id entreprise propriétaire, 16 nom de cette entreprise, 17 prix d'achat en centimes, 18 location en cours (0/1), 19 nombre de colocataires.
+     * 14 catalogue, 15 id entreprise propriétaire, 16 nom de cette entreprise, 17 prix d'achat en centimes, 18 location en cours (0/1), 19 nombre de colocataires,
+     * 20 terrain à bâtir : « surface|prix au m²|hauteur|profondeur|remise à nu 0/1|minX,minY,minZ,maxX,maxY,maxZ » (vide si ce n'est pas un terrain).
      */
     public static List<String> list(MinecraftServer s) {
         OwnerDoorData d = OwnerDoorData.get(s.overworld());
@@ -72,7 +73,14 @@ public final class PropertyAdmin {
                 String.valueOf(rented ? l.renterCompany() : 0), String.valueOf(rented ? l.expiryMs() : 0), String.valueOf(h.doors().size()),
                 String.valueOf(p.getX()), String.valueOf(p.getY()), String.valueOf(p.getZ()), info.catalogue(),
                 String.valueOf(cid), company ? EntrepriseCompat.name(s, cid) : "", String.valueOf(d.housePurchasePrice(h.first())),
-                rented ? "1" : "0", String.valueOf(holder == null ? 0 : d.trusted(holder).size()));
+                rented ? "1" : "0", String.valueOf(holder == null ? 0 : d.trusted(holder).size()), landInfo(s, h));
+    }
+
+    private static String landInfo(MinecraftServer s, House h) {
+        var l = fr.minenorth.portes.deco.TerrainData.get(s).land(PropertyInfoData.key(h.dimension(), h.name()));
+        if (l == null) return "";
+        return l.area() + "|" + l.pricePerM2 + "|" + l.height + "|" + l.depth + "|" + (l.resetting ? 1 : 0) + "|"
+                + l.minX + "," + l.minY + "," + l.minZ + "," + l.maxX + "," + l.maxY + "," + l.maxZ;
     }
 
     /** Colocataires (joueurs de confiance) du titulaire du bien : « uuid » par ligne. */
@@ -234,6 +242,7 @@ public final class PropertyAdmin {
                     PropertyLog.add(s, h.dimension(), name, by + " (staff) " + (add ? "ajoute " : "retire ") + who + " des colocataires");
                     return ok(who + (add ? " ajouté aux colocataires de " : " retiré des colocataires de ") + name + ".");
                 }
+                case "landPrice" -> { return fr.minenorth.portes.deco.TerrainService.setPricePerM2(s, h.dimension(), name, n, by); }
                 default -> { return ko("Action inconnue."); }
             }
         } catch (RuntimeException ex) {

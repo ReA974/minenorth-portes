@@ -11,6 +11,8 @@ public final class ImmoRules {
     public static final int MAX_LOCALS = 2;
     /** Petit commerce, stockage, garage, autres : 2 biens par catégorie (choix par défaut, à ajuster ici). */
     public static final int MAX_OTHERS = 2;
+    /** Terrains à bâtir : 1 par joueur (+ avantage VIP « logementsBonus »). */
+    public static final int MAX_LANDS = 1;
     private static final long DAY_MS = 86_400_000L;
 
     /** Remboursement à la revente : 65 % du prix d'achat, arrondi au centime inférieur. */
@@ -23,8 +25,14 @@ public final class ImmoRules {
             case BUSINESS -> MAX_BUSINESSES;
             case LOCAL -> MAX_LOCALS;
             case SMALL_SHOP, STORAGE, GARAGE, OTHER -> MAX_OTHERS;
+            case LAND -> MAX_LANDS;
         };
     }
+
+    /** Limite avec le bonus VIP (logements seulement : maison, appartement, terrain). */
+    public static int limit(PropertyCategory c, int vipBonus) { return limit(c) + (c.residential() ? Math.max(0, vipBonus) : 0); }
+
+    public static boolean canAcquire(PropertyCategory c, int heldNow, int vipBonus) { return heldNow < limit(c, vipBonus); }
 
     /** Vrai si le titulaire (joueur ou entreprise) peut encore acquérir un bien de cette catégorie. */
     public static boolean canAcquire(PropertyCategory c, int heldNow) { return heldNow < limit(c); }

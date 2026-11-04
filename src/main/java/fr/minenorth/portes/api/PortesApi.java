@@ -13,6 +13,9 @@ import java.util.List;
 public final class PortesApi {
     private PortesApi() {}
 
+    /** Terrains à bâtir disponibles (vente ou location, personne dessus) : « dimension|x|y|z|nom|SALE ou RENTAL|prix en centimes|surface ». */
+    public static List<String> lands(MinecraftServer s) { return fr.minenorth.portes.deco.TerrainService.available(s); }
+
     /** Locaux d'entreprise (achetés ou loués en cours), une ligne par bien : « idEntreprise|dimension|x|y|z|nomDuBien ». */
     public static List<String> companyBuildings(MinecraftServer s) {
         List<String> out = new ArrayList<>();

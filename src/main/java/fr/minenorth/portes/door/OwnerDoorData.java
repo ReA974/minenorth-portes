@@ -517,6 +517,17 @@ public class OwnerDoorData extends SavedData {
     /** Vrai (une seule fois) si une location a expiré depuis le dernier appel : le fichier porte.toml doit alors être réécrit. */
     public boolean takeExpired() { boolean r = expiredFlag; expiredFlag = false; return r; }
 
+    /**
+     * Repère d'un terrain à bâtir : une « porte » sans bloc de porte, maison personnelle sans propriétaire, qui porte le nom du terrain
+     * (l'agence, le pont WorldGuard et le panneau admin le traitent comme n'importe quel bien). Renvoie faux si la position est déjà prise.
+     */
+    public boolean createLandMarker(DoorKey key, String houseName) {
+        if (doors.containsKey(key)) return false;
+        doors.put(key, new DoorEntry(null, false, "", DoorType.PERSONAL, "", cleanHouseName(houseName), 0, 0));
+        setDirty();
+        return true;
+    }
+
     public void replaceDoors(Collection<Map.Entry<DoorKey, DoorEntry>> entries) {
         doors.clear();
         for (var entry : entries) doors.put(entry.getKey(), entry.getValue());

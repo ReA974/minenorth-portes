@@ -24,6 +24,15 @@ public final class PropertyAdminApi {
     /** Journal du bien, du plus récent au plus ancien : « date en ms » TAB « texte ». */
     public static List<String> log(MinecraftServer s, String dimension, String houseName) { return PropertyAdmin.log(s, dimension, houseName); }
 
+    /**
+     * Crée un terrain nu à bâtir (région WorldGuard, photo d'origine, fiche de vente ou de location). mode : SALE ou RENTAL ; pricePerM2 en centimes.
+     * Renvoie « OK » ou « KO » + TAB + message.
+     */
+    public static String createLand(MinecraftServer s, String dimension, String name, int x1, int z1, int x2, int z2, int height, int depth,
+                                    long pricePerM2, String mode, int days, String actor) {
+        return fr.minenorth.portes.deco.TerrainService.create(s, dimension, name, x1, z1, x2, z2, height, depth, pricePerM2, mode, days, actor);
+    }
+
     /** Action sur un bien ; renvoie « OK » ou « KO » + TAB + message. */
     public static String act(MinecraftServer s, String action, String dimension, String houseName, String playerUuid, String playerName,
                              long n, int days, String text, String actor) {

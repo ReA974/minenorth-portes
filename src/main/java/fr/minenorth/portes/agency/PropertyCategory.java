@@ -5,7 +5,7 @@ import java.util.Locale;
 /**
  * Catégorie d'un bien (filtre du catalogue, réglée dans la fiche d'agence de la porte).
  * BUSINESS est réservé aux entreprises ; LOCAL, STORAGE et GARAGE s'achètent au choix en personnel ou par une entreprise ;
- * les autres sont pour les joueurs seulement.
+ * les autres sont pour les joueurs seulement. LAND = terrain nu à bâtir (région WorldGuard créée par le staff, remis à nu à la revente).
  * L'ordre ne doit pas changer : le filtre du catalogue suit cet ordre.
  */
 public enum PropertyCategory {
@@ -16,7 +16,8 @@ public enum PropertyCategory {
     SMALL_SHOP("Petit commerce", "COMMERCE"),
     STORAGE("Stockage", "STOCKAGE"),
     GARAGE("Garage", "GARAGE"),
-    OTHER("Autres", "AUTRES");
+    OTHER("Autres", "AUTRES"),
+    LAND("Terrain", "TERRAIN");
 
     private final String label;
     private final String shortLabel;
@@ -37,6 +38,9 @@ public enum PropertyCategory {
 
     /** Vrai si une entreprise peut acquérir ce bien (obligatoirement ou au choix). */
     public boolean companyAllowed() { return companyOnly() || companyOptional(); }
+
+    /** Logement (maison, appartement, terrain à bâtir) : l'avantage VIP « logementsBonus » augmente la limite de ces catégories. */
+    public boolean residential() { return this == HOUSE || this == APARTMENT || this == LAND; }
 
     public static PropertyCategory from(String value) {
         try { return valueOf(value.trim().toUpperCase(Locale.ROOT)); } catch (Exception e) { return HOUSE; }
