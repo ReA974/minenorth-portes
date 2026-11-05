@@ -53,16 +53,19 @@ public final class Zones {
 
     private static final Map<Path, RegionFile> FILES = new HashMap<>();
     private static List<Home> cache = List.of();
-    private static int cacheTick = Integer.MIN_VALUE;
+    private static int cacheTick;
+    /** Liste à recalculer. Un drapeau et non un tick « très ancien » : now - Integer.MIN_VALUE déborde, la liste restait vide pour toujours. */
+    private static boolean stale = true;
 
     /** À appeler quand l'occupation change (achat, vente…) : la liste est recalculée au prochain appel. */
-    public static void invalidate() { cacheTick = Integer.MIN_VALUE; }
+    public static void invalidate() { stale = true; }
 
     public static List<Home> homes(MinecraftServer s) {
         int now = s.getTickCount();
-        if (now - cacheTick >= 20 || now < cacheTick) {
+        if (stale || now - cacheTick >= 20 || now < cacheTick) {
             cache = build(s);
             cacheTick = now;
+            stale = false;
         }
         return cache;
     }

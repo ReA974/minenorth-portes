@@ -16,6 +16,7 @@ public final class DecoCommands {
     private DecoCommands() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> d) {
+        d.register(Commands.literal("diagdeco").executes(c -> DecoDiag.run(c.getSource().getPlayerOrException())));
         d.register(Commands.literal("deco").requires(s -> s.hasPermission(2))
                 .then(Commands.literal("recharger").executes(c -> {
                     DecoConfig.load();
