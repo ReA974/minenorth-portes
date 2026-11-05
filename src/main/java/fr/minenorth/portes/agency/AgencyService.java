@@ -277,6 +277,7 @@ public final class AgencyService {
         SystemeConfigFiles.writeDoors(s, d);
         ModNetwork.syncDoorLocks(s);
         MapBridge.refresh(s);   // la carte pose / retire le point du local tout de suite
+        HomeMarkers.dirty();   // et le repère « Mon bien » des occupants
         fr.minenorth.portes.deco.MoveWatcher.check(s);   // déménagement immédiat si le titulaire a changé (vente, expulsion, libération…)
     }
 
@@ -343,9 +344,36 @@ public final class AgencyService {
         else bank.refund(p.server, payer, cents, "portes:annulation");
     }
 
-    public static AgencyResult buy(ServerPlayer p, String dimension, String houseName, int companyId) { return acquire(p, dimension, houseName, companyId, false); }
+    public static AgencyResult buy(ServerPlayer p, String dimension, String houseName, int companyId) { return tell(p, acquire(p, dimension, houseName, companyId, false)); }
 
-    public static AgencyResult rent(ServerPlayer p, String dimension, String houseName, int companyId) { return acquire(p, dimension, houseName, companyId, true); }
+    public static AgencyResult rent(ServerPlayer p, String dimension, String houseName, int companyId) { return tell(p, acquire(p, dimension, houseName, companyId, true)); }
+
+    /**
+     * Le résultat part aussi dans le chat et au-dessus de la barre d'objets : l'écran de l'agence (mod Immo) ne l'affichait pas toujours
+     * (achat refusé sans carte bancaire : rien ne se passait à l'écran).
+     */
+    private static AgencyResult tell(ServerPlayer p, AgencyResult r) {
+        if (r == null || r.message() == null || r.message().isBlank()) return r;
+        String color = r.ok() ? "§a" : "§c";
+        p.sendSystemMessage(net.minecraft.network.chat.Component.literal("§8[§bAgence§8] " + color + r.message()));
+        p.displayClientMessage(net.minecraft.network.chat.Component.literal(color + r.message()), true);
+        return r;
+    }
+
+    /** Message clair pour chaque refus de paiement (achat, location ou prolongation). */
+    private static String payError(PayResult r, String what, long cents, boolean company) {
+        return switch (r) {
+            case NO_CARD -> company
+                    ? "Il vous faut la carte bancaire de l'entreprise en main pour " + what + " ce bien."
+                    : "Il vous faut votre carte bancaire sur vous pour " + what + " ce bien.";
+            case FOREIGN_CARD -> "Cette carte bancaire n'est pas à votre nom (ou n'est pas celle de l'entreprise) : impossible de " + what + " ce bien.";
+            case NO_ACCOUNT -> "Il vous faut un compte bancaire (EuroBank) pour " + what + " ce bien.";
+            case INSUFFICIENT_FUNDS -> "Solde insuffisant : il faut " + euros(cents) + " sur le compte pour " + what + " ce bien.";
+            case INVALID_AMOUNT -> "Prix du bien invalide : prévenez le staff.";
+            case UNAVAILABLE -> company ? "Compte de l'entreprise introuvable ou banque indisponible : réessayez plus tard." : "La banque est indisponible : réessayez plus tard.";
+            default -> "Paiement refusé : " + r.message();
+        };
+    }
 
     private static AgencyResult acquire(ServerPlayer p, String dimension, String houseName, int companyId, boolean rental) {
         MinecraftServer s = p.server;
@@ -382,7 +410,7 @@ public final class AgencyService {
             }
             r = collect(p, 0, payeeAcc, e == null ? null : e.owner(), price, source);
         }
-        if (r != PayResult.OK) return AgencyResult.fail("Paiement refusé : " + r.message());
+        if (r != PayResult.OK) return AgencyResult.fail(payError(r, rental ? "louer" : "acheter", price, asCompany));
         try {
             if (rental) {
                 String name = asCompany ? EntrepriseCompat.name(s, companyId) : "";
@@ -403,7 +431,9 @@ public final class AgencyService {
         return AgencyResult.ok(rental ? "Location activée pour " + l.days() + " jour(s) : " + h.name() + "." : "Achat effectué : " + h.name() + " pour " + euros(price) + ".");
     }
 
-    public static AgencyResult extend(ServerPlayer p, String dimension, String houseName) {
+    public static AgencyResult extend(ServerPlayer p, String dimension, String houseName) { return tell(p, extend0(p, dimension, houseName)); }
+
+    private static AgencyResult extend0(ServerPlayer p, String dimension, String houseName) {
         MinecraftServer s = p.server;
         OwnerDoorData d = OwnerDoorData.get(s.overworld());
         House h = find(d, dimension, houseName);
@@ -422,7 +452,7 @@ public final class AgencyService {
             DoorEntry first = d.entry(h.first());
             r = collect(p, 0, payeeAcc, first == null ? null : first.owner(), l.price(), "portes:location");
         }
-        if (r != PayResult.OK) return AgencyResult.fail("Paiement refusé : " + r.message());
+        if (r != PayResult.OK) return AgencyResult.fail(payError(r, "prolonger la location de", l.price(), company));
         long expiry = ImmoRules.extendedExpiryMs(System.currentTimeMillis(), l.expiryMs(), l.days());
         d.extendRental(h.first(), expiry);
         persist(s, d);
@@ -431,7 +461,9 @@ public final class AgencyService {
     }
 
     /** Arrêt d'une location à la demande du locataire (ou du patron pour une entreprise) : aucun remboursement. */
-    public static AgencyResult stopRental(ServerPlayer p, String dimension, String houseName) {
+    public static AgencyResult stopRental(ServerPlayer p, String dimension, String houseName) { return tell(p, stopRental0(p, dimension, houseName)); }
+
+    private static AgencyResult stopRental0(ServerPlayer p, String dimension, String houseName) {
         MinecraftServer s = p.server;
         OwnerDoorData d = OwnerDoorData.get(s.overworld());
         House h = find(d, dimension, houseName);
@@ -453,7 +485,9 @@ public final class AgencyService {
         return AgencyResult.ok("Location arrêtée (aucun remboursement) : « " + h.name() + " » est de nouveau disponible.");
     }
 
-    public static AgencyResult resell(ServerPlayer p, String dimension, String houseName) {
+    public static AgencyResult resell(ServerPlayer p, String dimension, String houseName) { return tell(p, resell0(p, dimension, houseName)); }
+
+    private static AgencyResult resell0(ServerPlayer p, String dimension, String houseName) {
         MinecraftServer s = p.server;
         OwnerDoorData d = OwnerDoorData.get(s.overworld());
         House h = find(d, dimension, houseName);

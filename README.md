@@ -77,3 +77,7 @@ Paquet `deco/`. **Protocole réseau : 10** (serveur et clients ensemble).
   3. ce qui n'est pas au registre (terre creusée, blocs naturels déplacés, entités comme cadres ou supports d'armure) n'est pas rendu : **aucune duplication possible** ;
   4. pendant la remise à nu le terrain ne peut pas être acquis ; un arrêt du serveur la reprend au démarrage ; photo illisible = terrain bloqué (`/deco terrain-debloquer`).
 - Un bien passé en catégorie Terrain à la main (bouton de catégorie) n'a pas de photo : il n'est pas remis à nu (seul le déménagement s'applique).
+
+## Agence : messages d'échec et repères « Mon bien » (05/11)
+- **Messages** : achat, location, prolongation, arrêt de location et revente renvoient leur résultat aussi dans le chat et au-dessus de la barre d'objets (l'écran du mod Immo ne l'affichait pas toujours). Chaque refus de paiement a son texte : pas de carte bancaire (ou pas celle de l'entreprise en main), carte d'un autre, pas de compte, solde insuffisant (montant rappelé), banque indisponible.
+- **Repères** (`agency.HomeMarkers`, mod Carte par réflexion) : « Mon bien · nom » (icône `maison`) ou « Ma location · nom » (icône `location`, clé) à la première porte, envoyés seulement aux occupants (titulaire, colocataires, patron pour un local d'entreprise). Recalcul toutes les 5 s et juste après chaque changement d'occupation ; le repère est retiré à la revente ou à la fin du bail.
